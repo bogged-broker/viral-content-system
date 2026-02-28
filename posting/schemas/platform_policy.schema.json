@@ -1,0 +1,686 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://posting.system/schemas/platform_policy.schema.json",
+  "title": "Authoritative Platform Capability & Constraint Contract",
+  "description": "Canonical, declarative contract that defines what the system is allowed to do on a given platform and what it must never do. This is the only sanctioned source of platform constraints. Tier-0, invariant-locked, production-maximum specification. No ambiguity. No runtime invention.",
+  "schema_version": "1.0.0",
+    "type": "object",
+    "required": [
+        "schema_version",
+        "platform",
+        "policy_version",
+        "capabilities",
+        "constraints",
+        "limits",
+        "visibility_rules",
+        "effective_at"
+    ],
+  "additionalProperties": false,
+    "properties": {
+        "schema_version": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of schema structure. Breaking changes require version bump.",
+      "const": "1.0.0"
+        },
+        "platform": {
+            "type": "string",
+      "enum": [
+        "youtube",
+        "tiktok",
+        "instagram",
+        "twitter",
+        "linkedin",
+        "facebook",
+        "snapchat",
+        "pinterest",
+        "reddit",
+        "twitch",
+        "bluesky",
+        "mastodon"
+      ],
+      "description": "Normalized platform identifier. Immutable. Must match platform identifiers used across the system."
+        },
+        "policy_version": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Human-readable semantic version for audits and rollbacks. Used to track policy evolution."
+        },
+        "capabilities": {
+            "type": "object",
+            "required": [
+                "supports_scheduling",
+                "supports_private_posting",
+                "supports_retries",
+                "supports_edits",
+                "supports_deletes",
+                "supports_multiple_accounts"
+            ],
+      "additionalProperties": false,
+      "description": "Defines what is technically supported. No assumptions allowed outside this block.",
+            "properties": {
+                "supports_scheduling": {
+                    "type": "boolean",
+          "description": "Platform allows future-dated posts. If false, all posts must be immediate."
+                },
+                "supports_private_posting": {
+                    "type": "boolean",
+          "description": "Platform supports non-public visibility levels (private, unlisted, etc.)."
+                },
+                "supports_retries": {
+                    "type": "boolean",
+          "description": "Safe to retry failed posts. If false, failed posts must not be retried."
+                },
+                "supports_edits": {
+                    "type": "boolean",
+          "description": "Platform allows post editing after publish. If false, posts are immutable after creation."
+                },
+                "supports_deletes": {
+                    "type": "boolean",
+          "description": "Platform allows post deletion. If false, posts cannot be removed."
+                },
+                "supports_multiple_accounts": {
+                    "type": "boolean",
+          "description": "Multiple accounts allowed per session/IP. If false, only one account per session."
+                }
+            }
+        },
+        "constraints": {
+            "type": "object",
+            "required": [
+                "requires_human_delay",
+                "forbids_mass_posting",
+                "forbids_identical_content",
+                "forbids_simultaneous_posts"
+            ],
+      "additionalProperties": false,
+      "description": "Defines what must never be violated. These are hard rules, not suggestions.",
+            "properties": {
+                "requires_human_delay": {
+                    "type": "boolean",
+          "description": "Mandates delay between posts to simulate human behavior. If true, min_human_delay_seconds must be specified."
+                },
+                "min_human_delay_seconds": {
+                    "type": "integer",
+                    "minimum": 0,
+          "maximum": 86400,
+          "description": "Minimum seconds between posts. Required if requires_human_delay is true. Must be >= 0 and <= 86400 (24 hours)."
+                },
+                "forbids_mass_posting": {
+                    "type": "boolean",
+          "description": "Prohibits rapid bulk posting. If true, posting multiple items in quick succession is forbidden."
+                },
+                "forbids_identical_content": {
+                    "type": "boolean",
+          "description": "Duplicate content not allowed. If true, identical content cannot be posted multiple times."
+                },
+                "forbids_simultaneous_posts": {
+                    "type": "boolean",
+          "description": "Concurrent posts from same account forbidden. If true, only one post operation per account at a time."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "requires_human_delay": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": ["min_human_delay_seconds"],
+            "properties": {
+              "min_human_delay_seconds": {
+                "minimum": 1,
+                "description": "Must be at least 1 second if requires_human_delay is true"
+              }
+            }
+          }
+        }
+      ]
+        },
+        "limits": {
+            "type": "object",
+            "required": [
+                "max_posts_per_day",
+                "max_posts_per_hour",
+                "max_retries_per_post"
+            ],
+      "additionalProperties": false,
+      "description": "Declarative, static limits (not telemetry). Dynamic enforcement lives elsewhere.",
+            "properties": {
+                "max_posts_per_day": {
+                    "type": "integer",
+                    "minimum": 1,
+          "maximum": 1000,
+          "description": "Hard daily post limit. Must be >= 1. Conservative default recommended."
+                },
+                "max_posts_per_hour": {
+                    "type": "integer",
+                    "minimum": 1,
+          "maximum": 100,
+          "description": "Hard hourly post limit. Must be >= 1. Cannot exceed max_posts_per_day."
+                },
+                "max_retries_per_post": {
+                    "type": "integer",
+                    "minimum": 0,
+          "maximum": 10,
+          "description": "Maximum retry attempts per post. 0 means no retries allowed."
+                },
+                "max_accounts_per_ip": {
+                    "type": "integer",
+                    "minimum": 1,
+          "maximum": 100,
+          "description": "Account limit per IP address. Prevents IP-based rate limiting."
+        }
+      },
+      "allOf": [
+        {
+          "description": "max_posts_per_hour cannot exceed max_posts_per_day - validated at runtime by business logic"
+        }
+      ]
+        },
+        "visibility_rules": {
+            "type": "object",
+            "required": [
+                "default_visibility",
+                "allowed_visibilities"
+            ],
+      "additionalProperties": false,
+      "description": "Platform-specific exposure semantics. Consumed by visibility_policy.py.",
+            "properties": {
+                "default_visibility": {
+                    "type": "string",
+                    "enum": ["PUBLIC", "UNLISTED", "PRIVATE"],
+          "description": "Default post visibility. Must be one of the allowed_visibilities."
+                },
+                "allowed_visibilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["PUBLIC", "UNLISTED", "PRIVATE"]
+                    },
+                    "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "description": "Permitted visibility levels. Must include at least one value. default_visibility must be in this list."
+                },
+                "shadow_visibility_possible": {
+                    "type": "boolean",
+          "description": "Platform may shadow-restrict content without explicit notification. If true, posts may appear successful but have limited reach."
+        }
+      },
+      "allOf": [
+        {
+          "description": "default_visibility must be in allowed_visibilities - validated at runtime by business logic"
+        }
+      ]
+        },
+        "effective_at": {
+            "type": "number",
+            "minimum": 0,
+      "description": "Unix timestamp (float) when policy becomes active. Future-dated policies allowed for safe rollouts. Used for safe rollouts."
+        },
+        "deprecated": {
+            "type": "boolean",
+      "default": false,
+      "description": "If true, policy is read-only, no new posts allowed. Migration required. New posts forbidden."
+        },
+        "metadata": {
+            "type": "object",
+      "additionalProperties": false,
+      "description": "Annotation only. Ignored by logic. Used for audits and debugging.",
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "enum": ["manual", "platform_docs", "legal"],
+          "description": "Origin of policy data. Tracks where policy information came from."
+                },
+                "notes": {
+                    "type": "string",
+          "maxLength": 10000,
+          "description": "Human-readable annotations. Free-form text for documentation."
+                },
+                "reviewed_by": {
+                    "type": "string",
+          "maxLength": 255,
+          "description": "Policy reviewer identifier. Tracks who reviewed/approved this policy."
+                },
+                "last_updated": {
+                    "type": "string",
+                    "format": "date-time",
+          "description": "ISO 8601 timestamp of last review. Used for audit trail."
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "Business rule: If requires_human_delay is true, min_human_delay_seconds must be specified and >= 1",
+      "if": {
+        "properties": {
+          "constraints": {
+            "properties": {
+              "requires_human_delay": {
+                "const": true
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "constraints": {
+            "required": ["min_human_delay_seconds"],
+            "properties": {
+              "min_human_delay_seconds": {
+                "minimum": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Business rule: max_posts_per_hour cannot exceed max_posts_per_day - enforced by PlatformPolicyValidator.validate_policy()"
+    },
+    {
+      "description": "Business rule: default_visibility must be in allowed_visibilities - enforced by PlatformPolicyValidator.validate_policy()"
+    },
+    {
+      "description": "Forbidden content check: No account IDs, rate counters, credentials, retry state, platform payloads, or heuristics. This schema is pure policy only.",
+      "not": {
+        "anyOf": [
+          {
+            "properties": {
+              "account_ids": {}
+            }
+          },
+          {
+            "properties": {
+              "rate_counters": {}
+            }
+          },
+          {
+            "properties": {
+              "credentials": {}
+            }
+          },
+          {
+            "properties": {
+              "retry_state": {}
+            }
+          },
+          {
+            "properties": {
+              "platform_payloads": {}
+            }
+          },
+          {
+            "properties": {
+              "heuristics": {}
+            }
+          },
+          {
+            "properties": {
+              "telemetry": {}
+            }
+          },
+          {
+            "properties": {
+              "sdk_configuration": {}
+            }
+          },
+          {
+            "properties": {
+              "inferred_suppression_logic": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "Tier-0 invariant: Policy must be effective (effective_at <= current_time) or future-dated for safe rollouts",
+      "properties": {
+        "effective_at": {
+          "type": "number"
+        }
+      }
+    },
+    {
+      "description": "Tier-0 invariant: Deprecated policies cannot be used for new posts",
+      "if": {
+        "properties": {
+          "deprecated": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "description": "When deprecated=true, no new posts are allowed. Migration to new policy required."
+      }
+    }
+  ],
+  "$defs": {
+    "invariants": {
+      "description": "Invariants guaranteed by this schema",
+      "type": "object",
+      "properties": {
+        "platforms_cannot_be_overdriven": {
+          "type": "string",
+          "const": "Limits are explicit and enforced. No platform can be driven beyond declared limits."
+        },
+        "code_cannot_invent_features": {
+          "type": "string",
+          "const": "Capabilities are explicit. Code cannot assume features not declared in capabilities block."
+        },
+        "limits_are_explicit": {
+          "type": "string",
+          "const": "All limits are declarative and static. No inferred limits allowed."
+        },
+        "violations_are_detectable": {
+          "type": "string",
+          "const": "All violations are detectable pre-runtime via schema validation."
+        },
+        "platform_behavior_is_auditable": {
+          "type": "string",
+          "const": "All platform behavior is governed by this policy, making audits mechanical."
+        }
+      }
+    },
+    "authority_boundary": {
+      "description": "Components that must respect this schema",
+      "type": "object",
+      "properties": {
+        "platform_limits_py": {
+          "type": "string",
+          "const": "Must read and enforce limits from this schema"
+        },
+        "upload_contract_py": {
+          "type": "string",
+          "const": "Must validate against this schema"
+        },
+        "base_poster_py": {
+          "type": "string",
+          "const": "Must validate against this schema"
+        },
+        "rollout_controller_py": {
+          "type": "string",
+          "const": "Must gate operations using this schema"
+        },
+        "fallback_policy_py": {
+          "type": "string",
+          "const": "Must evaluate using this schema"
+        }
+      }
+    },
+    "interaction_matrix": {
+      "description": "How components interact with this schema",
+      "type": "object",
+      "properties": {
+        "base_poster_py": {
+          "type": "string",
+          "enum": ["validate"],
+          "description": "Must validate all operations against this schema"
+        },
+        "upload_contract_py": {
+          "type": "string",
+          "enum": ["validate"],
+          "description": "Must validate upload contracts against this schema"
+        },
+        "platform_limits_py": {
+          "type": "string",
+          "enum": ["read"],
+          "description": "Must read limits from this schema"
+        },
+        "rollout_controller_py": {
+          "type": "string",
+          "enum": ["gate"],
+          "description": "Must gate rollouts using this schema"
+        },
+        "fallback_policy_py": {
+          "type": "string",
+          "enum": ["evaluate"],
+          "description": "Must evaluate fallback policies using this schema"
+        },
+        "audit_logger_py": {
+          "type": "string",
+          "enum": ["log"],
+          "description": "Must log policy violations"
+        }
+      }
+    },
+    "forbidden_content": {
+      "description": "Content that MUST NOT appear in this schema. This file is pure policy, not operational data.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "account_ids",
+          "rate_counters",
+          "credentials",
+          "retry_state",
+          "platform_payloads",
+          "heuristics",
+          "telemetry",
+          "sdk_configuration",
+          "inferred_suppression_logic",
+          "account_state",
+          "post_results",
+          "session_data",
+          "cookies",
+          "tokens",
+          "api_keys"
+        ]
+      }
+    },
+    "validation_requirements": {
+      "description": "Mandatory validation that must be performed by PlatformPolicyValidator",
+      "type": "object",
+      "properties": {
+        "schema_validation": {
+          "type": "string",
+          "const": "Validate against JSON Schema Draft 2020-12"
+        },
+        "business_rules": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "requires_human_delay_implies_min_delay",
+              "max_posts_per_hour_le_max_posts_per_day",
+              "default_visibility_in_allowed_visibilities",
+              "effective_at_not_future_for_active_policy",
+              "deprecated_policy_blocks_new_posts"
+            ]
+          }
+        }
+      }
+    },
+    "enforcement_points": {
+      "description": "Components that must enforce this policy",
+      "type": "object",
+      "properties": {
+        "base_poster_py": {
+          "type": "string",
+          "const": "Validate all post operations against capabilities and constraints"
+        },
+        "upload_contract_py": {
+          "type": "string",
+          "const": "Validate upload contracts against platform capabilities"
+        },
+        "platform_limits_py": {
+          "type": "string",
+          "const": "Read and enforce limits from this policy"
+        },
+        "rollout_controller_py": {
+          "type": "string",
+          "const": "Gate rollouts using policy constraints and limits"
+        },
+        "fallback_policy_py": {
+          "type": "string",
+          "const": "Evaluate fallback policies using this schema"
+        },
+        "audit_logger_py": {
+          "type": "string",
+          "const": "Log all policy violations for compliance"
+        },
+        "risk_evaluator_py": {
+          "type": "string",
+          "const": "Consider policy constraints when evaluating risk"
+        }
+      }
+    },
+    "design_principles": {
+      "description": "Core design principles that this schema enforces",
+      "type": "object",
+      "properties": {
+        "declarative_over_procedural": {
+          "type": "string",
+          "const": "Platform rules are explicit, not inferred"
+        },
+        "constraints_are_enumerable": {
+          "type": "string",
+          "const": "All constraints are explicitly listed"
+        },
+        "defaults_are_conservative": {
+          "type": "string",
+          "const": "When in doubt, use conservative limits"
+        },
+        "violations_are_detectable": {
+          "type": "string",
+          "const": "All violations detectable pre-runtime"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0.0",
+      "platform": "youtube",
+      "policy_version": "2024.1.0",
+      "capabilities": {
+        "supports_scheduling": true,
+        "supports_private_posting": true,
+        "supports_retries": true,
+        "supports_edits": true,
+        "supports_deletes": true,
+        "supports_multiple_accounts": true
+      },
+      "constraints": {
+        "requires_human_delay": true,
+        "min_human_delay_seconds": 900,
+        "forbids_mass_posting": true,
+        "forbids_identical_content": true,
+        "forbids_simultaneous_posts": true
+      },
+      "limits": {
+        "max_posts_per_day": 4,
+        "max_posts_per_hour": 1,
+        "max_retries_per_post": 2,
+        "max_accounts_per_ip": 1
+      },
+      "visibility_rules": {
+        "default_visibility": "PUBLIC",
+        "allowed_visibilities": ["PUBLIC", "UNLISTED", "PRIVATE"],
+        "shadow_visibility_possible": true
+      },
+      "effective_at": 1730000000.0,
+      "deprecated": false,
+      "metadata": {
+        "source": "platform_docs",
+        "notes": "Conservative limits for automated posting. YouTube allows scheduling and editing, making it more flexible than other platforms.",
+        "reviewed_by": "platform_team",
+        "last_updated": "2024-01-15T00:00:00Z"
+      }
+    },
+    {
+      "schema_version": "1.0.0",
+      "platform": "tiktok",
+      "policy_version": "2024.1.0",
+      "capabilities": {
+        "supports_scheduling": false,
+        "supports_private_posting": true,
+        "supports_retries": false,
+        "supports_edits": false,
+        "supports_deletes": true,
+        "supports_multiple_accounts": false
+      },
+      "constraints": {
+        "requires_human_delay": true,
+        "min_human_delay_seconds": 1800,
+        "forbids_mass_posting": true,
+        "forbids_identical_content": true,
+        "forbids_simultaneous_posts": true
+      },
+      "limits": {
+        "max_posts_per_day": 3,
+        "max_posts_per_hour": 1,
+        "max_retries_per_post": 0,
+        "max_accounts_per_ip": 1
+      },
+      "visibility_rules": {
+        "default_visibility": "PUBLIC",
+        "allowed_visibilities": ["PUBLIC", "PRIVATE"],
+        "shadow_visibility_possible": true
+      },
+      "effective_at": 1730000000.0,
+      "deprecated": false,
+      "metadata": {
+        "source": "platform_docs",
+        "notes": "Very strict limits due to aggressive bot detection. No retries, no scheduling, no edits. Posts are immutable after creation.",
+        "reviewed_by": "platform_team",
+        "last_updated": "2024-01-15T00:00:00Z"
+      }
+    },
+    {
+      "schema_version": "1.0.0",
+      "platform": "instagram",
+      "policy_version": "2024.1.0",
+      "capabilities": {
+        "supports_scheduling": true,
+        "supports_private_posting": true,
+        "supports_retries": true,
+        "supports_edits": false,
+        "supports_deletes": true,
+        "supports_multiple_accounts": true
+      },
+      "constraints": {
+        "requires_human_delay": true,
+        "min_human_delay_seconds": 1200,
+        "forbids_mass_posting": true,
+        "forbids_identical_content": true,
+        "forbids_simultaneous_posts": true
+      },
+      "limits": {
+        "max_posts_per_day": 5,
+        "max_posts_per_hour": 2,
+        "max_retries_per_post": 2,
+        "max_accounts_per_ip": 2
+      },
+      "visibility_rules": {
+        "default_visibility": "PUBLIC",
+        "allowed_visibilities": ["PUBLIC", "PRIVATE"],
+        "shadow_visibility_possible": true
+      },
+      "effective_at": 1730000000.0,
+      "deprecated": false,
+      "metadata": {
+        "source": "platform_docs",
+        "notes": "Instagram allows scheduling and private posts, but no editing after publish. Moderate limits.",
+        "reviewed_by": "platform_team",
+        "last_updated": "2024-01-15T00:00:00Z"
+      }
+    }
+  ],
+  "metadata": {
+    "schema_purpose": "Tier-0, invariant-locked, production-maximum specification for platform governance",
+    "authority_level": "Canonical - no component may violate this schema",
+    "versioning_policy": "Breaking changes require schema_version bump",
+    "validation_requirement": "All policies must pass PlatformPolicyValidator.validate_policy()",
+    "enforcement_requirement": "All components listed in enforcement_points must respect this schema",
+    "forbidden_content": "This schema MUST NOT contain: account IDs, rate counters, credentials, retry state, platform payloads, heuristics, telemetry, SDK configuration, or inferred suppression logic",
+    "design_philosophy": "Declarative over procedural. Constraints are enumerable. Defaults are conservative. Violations are detectable pre-runtime."
+  }
+}

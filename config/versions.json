@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0.0",
+  "config_versions": {
+    "system": "1.0.0",
+    "deployment": "1.0.0",
+    "factories": "1.0.0"
+  },
+  "last_updated": "2026-02-27T00:00:00Z"
+}

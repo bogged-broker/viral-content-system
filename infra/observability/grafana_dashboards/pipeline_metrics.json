@@ -1,0 +1,84 @@
+{
+  "dashboard": {
+    "title": "Viral Content System - Pipeline Metrics",
+    "tags": ["viral-content", "pipeline", "metrics"],
+    "timezone": "browser",
+    "schemaVersion": 27,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Ingestion Pipeline Throughput",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(viral_ingestion_items_processed_total[5m])",
+            "legendFormat": "Items/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Generation Pipeline Throughput",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(viral_generation_content_created_total[5m])",
+            "legendFormat": "Content/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Scoring Engine Throughput",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(viral_scoring_scores_computed_total[5m])",
+            "legendFormat": "Scores/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Posting System Throughput",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(viral_posting_posts_sent_total[5m])",
+            "legendFormat": "Posts/sec"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Pipeline Queue Depth",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "viral_pipeline_queue_depth",
+            "legendFormat": "{{pipeline}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "Pipeline Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(viral_pipeline_errors_total[5m])",
+            "legendFormat": "{{pipeline}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+      }
+    ]
+  }
+}

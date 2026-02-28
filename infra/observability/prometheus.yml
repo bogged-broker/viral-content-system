@@ -1,0 +1,84 @@
+# Prometheus Configuration for Viral Content System
+# This file configures Prometheus to scrape metrics from the system
+
+global:
+  scrape_interval: 10s      # Scrape targets every 10 seconds
+  evaluation_interval: 10s  # Evaluate rules every 10 seconds
+  external_labels:
+    cluster: 'viral-content-system'
+    environment: '${DEPLOYMENT_ENV}'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Scrape Viral Content System metrics endpoint
+  - job_name: 'viral-content-system'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets:
+          - 'localhost:8000'  # Main system metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Scrape system health endpoint
+  - job_name: 'viral-content-system-health'
+    metrics_path: '/health/metrics'
+    static_configs:
+      - targets:
+          - 'localhost:8000'
+    scrape_interval: 15s
+
+  # Scrape ingestion pipeline metrics
+  - job_name: 'ingestion-pipeline'
+    metrics_path: '/metrics/ingestion'
+    static_configs:
+      - targets:
+          - 'localhost:8001'
+    scrape_interval: 10s
+
+  # Scrape generation pipeline metrics
+  - job_name: 'generation-pipeline'
+    metrics_path: '/metrics/generation'
+    static_configs:
+      - targets:
+          - 'localhost:8002'
+    scrape_interval: 10s
+
+  # Scrape scoring engine metrics
+  - job_name: 'scoring-engine'
+    metrics_path: '/metrics/scoring'
+    static_configs:
+      - targets:
+          - 'localhost:8003'
+    scrape_interval: 10s
+
+  # Scrape posting system metrics
+  - job_name: 'posting-system'
+    metrics_path: '/metrics/posting'
+    static_configs:
+      - targets:
+          - 'localhost:8004'
+    scrape_interval: 10s
+
+  # Scrape safety watchdog metrics
+  - job_name: 'safety-watchdog'
+    metrics_path: '/metrics/safety'
+    static_configs:
+      - targets:
+          - 'localhost:8005'
+    scrape_interval: 15s

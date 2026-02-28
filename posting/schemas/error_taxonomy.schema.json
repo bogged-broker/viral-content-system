@@ -1,0 +1,496 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://posting.system/schemas/error_taxonomy.schema.json",
+    "title": "Canonical Cross-Platform Error Semantics Contract",
+    "description": "Single authoritative classification system for all errors in the posting pipeline. Defines error meaning independent of platform, SDK, or transport. This file permanently stabilizes retries, suppression analysis, rollout safety, and learning signals.",
+    "schema_version": "1.0.0",
+    "categories": {
+      "NETWORK_ERROR": {
+        "description": "Transport-layer failure - DNS, TCP, TLS, timeout",
+        "retryable": true,
+        "retry_strategy": "BACKOFF",
+        "severity": "MEDIUM",
+        "counts_against_account_health": false,
+        "counts_against_platform_trust": false,
+        "suppression_signal": false
+      },
+      "AUTH_ERROR": {
+        "description": "Authentication or authorization failure - credentials invalid or expired",
+        "retryable": false,
+        "retry_strategy": "NONE",
+        "severity": "HIGH",
+        "counts_against_account_health": true,
+        "counts_against_platform_trust": false,
+        "suppression_signal": false
+      },
+      "RATE_LIMIT": {
+        "description": "Platform-imposed request or posting limit exceeded - documented quota",
+        "retryable": true,
+        "retry_strategy": "BACKOFF",
+        "severity": "MEDIUM",
+        "counts_against_account_health": false,
+        "counts_against_platform_trust": false,
+        "suppression_signal": false
+      },
+      "CONTENT_REJECTED": {
+        "description": "Content violated platform policy, format rules, or safety filters",
+        "retryable": false,
+        "retry_strategy": "NONE",
+        "severity": "HIGH",
+        "counts_against_account_health": true,
+        "counts_against_platform_trust": true,
+        "suppression_signal": false
+      },
+      "PLATFORM_THROTTLE": {
+        "description": "Silent or explicit platform suppression - shadowban, velocity limit, or undocumented throttle",
+        "retryable": true,
+        "retry_strategy": "HUMAN_DELAY",
+        "severity": "HIGH",
+        "counts_against_account_health": true,
+        "counts_against_platform_trust": true,
+        "suppression_signal": true
+      },
+      "PLATFORM_BUG": {
+        "description": "Platform API returned invalid, contradictory, or malformed response",
+        "retryable": true,
+        "retry_strategy": "BACKOFF",
+        "severity": "MEDIUM",
+        "counts_against_account_health": false,
+        "counts_against_platform_trust": false,
+        "suppression_signal": false
+      },
+      "CLIENT_BUG": {
+        "description": "Our code violated API contract, precondition, or invariant",
+        "retryable": false,
+        "retry_strategy": "NONE",
+        "severity": "CRITICAL",
+        "counts_against_account_health": false,
+        "counts_against_platform_trust": false,
+        "suppression_signal": false
+      },
+      "UNKNOWN": {
+        "description": "Unable to classify error - requires investigation and taxonomy expansion",
+        "retryable": false,
+        "retry_strategy": "NONE",
+        "severity": "HIGH",
+        "counts_against_account_health": false,
+        "counts_against_platform_trust": false,
+        "suppression_signal": false
+      }
+    },
+    "retry_policies": {
+      "NETWORK_ERROR": {
+        "max_attempts": 3,
+        "cooldown_seconds": 300,
+        "backoff_multiplier": 2.0
+      },
+      "AUTH_ERROR": {
+        "max_attempts": 0,
+        "cooldown_seconds": 0
+      },
+      "RATE_LIMIT": {
+        "max_attempts": 1,
+        "cooldown_seconds": 3600
+      },
+      "CONTENT_REJECTED": {
+        "max_attempts": 0,
+        "cooldown_seconds": 0
+      },
+      "PLATFORM_THROTTLE": {
+        "max_attempts": 1,
+        "cooldown_seconds": 14400
+      },
+      "PLATFORM_BUG": {
+        "max_attempts": 2,
+        "cooldown_seconds": 600,
+        "backoff_multiplier": 3.0
+      },
+      "CLIENT_BUG": {
+        "max_attempts": 0,
+        "cooldown_seconds": 0
+      },
+      "UNKNOWN": {
+        "max_attempts": 0,
+        "cooldown_seconds": 0
+      }
+    },
+    "severity_levels": [
+      "LOW",
+      "MEDIUM",
+      "HIGH",
+      "CRITICAL"
+    ],
+    "global_invariants": [
+      "non_retryable_errors_are_terminal",
+      "critical_errors_trigger_audit",
+      "unknown_errors_are_never_ignored",
+      "suppression_signals_reduce_rollout",
+      "platform_bugs_are_never_retried_immediately",
+      "client_bugs_halt_rollout",
+      "auth_errors_quarantine_account",
+      "network_errors_do_not_affect_account_health"
+    ],
+    "failure_semantics": {
+      "on_unmappable_error": {
+        "category": "UNKNOWN",
+        "severity": "HIGH",
+        "retryable": false,
+        "audit_entry": "MANDATORY",
+        "no_silent_fallback": "Any unmapped error MUST be audited and investigated"
+      }
+    },
+    "classification_rules": {
+      "principles": [
+        "Platform HTTP status codes map to categories",
+        "Platform error codes map to categories",
+        "Platform error messages are secondary signals only",
+        "Multiple signals may map to same category",
+        "Ambiguous signals default to UNKNOWN",
+        "No downstream reclassification permitted"
+      ],
+      "example_mappings": {
+        "http_401_or_403": "AUTH_ERROR",
+        "http_429": "RATE_LIMIT",
+        "http_5xx": "PLATFORM_BUG",
+        "timeout_or_connection_refused": "NETWORK_ERROR",
+        "policy_violation_message": "CONTENT_REJECTED",
+        "undocumented_throttle": "PLATFORM_THROTTLE"
+      }
+    },
+    "downstream_consumers": {
+      "posting_state_store.py": {
+        "reads": ["retryable", "retry_strategy"],
+        "action": "Determine if transition to POST_FAILED or DEAD_LETTER"
+      },
+      "risk_evaluator.py": {
+        "reads": ["counts_against_account_health", "suppression_signal", "severity"],
+        "action": "Update account risk score and state"
+      },
+      "rollout_controller.py": {
+        "reads": ["counts_against_platform_trust", "severity", "suppression_signal"],
+        "action": "Adjust rollout percentage and account selection"
+      },
+      "reconciliation.py": {
+        "reads": ["category", "severity"],
+        "action": "Validate error distribution and detect anomalies"
+      },
+      "learning_pipeline": {
+        "reads": ["category", "suppression_signal", "counts_against_platform_trust"],
+        "action": "Train models on clean, classified failure data"
+      }
+    },
+    "metadata": {
+      "version": "1.0.0",
+      "last_updated": "2024-12-19T00:00:00Z",
+      "mapping_responsibility": {
+        "posting_errors.py": "Map platform responses to taxonomy",
+        "platform_response.schema.json": "Preserve raw truth",
+        "posting_state_store.py": "Persist classified error",
+        "risk_evaluator.py": "Score risk from taxonomy",
+        "rollout_controller.py": "Adjust exposure based on categories",
+        "anomaly_detector.py": "Detect classification drift"
+      },
+      "notes": "Tier-0 invariant-locked production-maximum specification. This file is the semantic keystone that prevents the system from ever lying to itself about failure. Every error across every platform collapses into this finite, governed, analyzable space. No component may invent error semantics outside this contract."
+    },
+    "$defs": {
+      "error_category": {
+        "type": "object",
+        "description": "Semantic error class definition - all fields required",
+        "required": [
+          "description",
+          "retryable",
+          "retry_strategy",
+          "severity",
+          "counts_against_account_health",
+          "counts_against_platform_trust",
+          "suppression_signal"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 512,
+            "description": "Human-readable category explanation"
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "May the system retry this error class"
+          },
+          "retry_strategy": {
+            "type": "string",
+            "enum": [
+              "NONE",
+              "IMMEDIATE",
+              "BACKOFF",
+              "HUMAN_DELAY"
+            ],
+            "description": "How to approach retries if retryable=true"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH",
+              "CRITICAL"
+            ],
+            "description": "Alert and kill switch priority level"
+          },
+          "counts_against_account_health": {
+            "type": "boolean",
+            "description": "Affects account_state transitions and risk score"
+          },
+          "counts_against_platform_trust": {
+            "type": "boolean",
+            "description": "Affects platform trust signals and rollout decisions"
+          },
+          "suppression_signal": {
+            "type": "boolean",
+            "description": "Indicates potential shadowban or platform throttling"
+          }
+        }
+      },
+      "retry_policy": {
+        "type": "object",
+        "description": "Declarative retry limits for error category",
+        "required": [
+          "max_attempts",
+          "cooldown_seconds"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "max_attempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10,
+            "description": "Maximum retry attempts before terminal failure"
+          },
+          "cooldown_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 86400,
+            "description": "Seconds to wait before retry eligibility"
+          },
+          "backoff_multiplier": {
+            "type": "number",
+            "minimum": 1.0,
+            "maximum": 10.0,
+            "description": "Exponential backoff multiplier (optional)"
+          }
+        }
+      }
+    },
+    "type": "object",
+    "required": [
+      "schema_version",
+      "categories",
+      "retry_policies",
+      "severity_levels",
+      "global_invariants"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "type": "string",
+        "const": "1.0.0",
+        "description": "Schema version - backward compatible only"
+      },
+      "categories": {
+        "type": "object",
+        "description": "Closed-set semantic failure classes - no other categories permitted",
+        "required": [
+          "NETWORK_ERROR",
+          "AUTH_ERROR",
+          "RATE_LIMIT",
+          "CONTENT_REJECTED",
+          "PLATFORM_THROTTLE",
+          "PLATFORM_BUG",
+          "CLIENT_BUG",
+          "UNKNOWN"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "NETWORK_ERROR": {
+            "$ref": "#/$defs/error_category"
+          },
+          "AUTH_ERROR": {
+            "$ref": "#/$defs/error_category"
+          },
+          "RATE_LIMIT": {
+            "$ref": "#/$defs/error_category"
+          },
+          "CONTENT_REJECTED": {
+            "$ref": "#/$defs/error_category"
+          },
+          "PLATFORM_THROTTLE": {
+            "$ref": "#/$defs/error_category"
+          },
+          "PLATFORM_BUG": {
+            "$ref": "#/$defs/error_category"
+          },
+          "CLIENT_BUG": {
+            "$ref": "#/$defs/error_category"
+          },
+          "UNKNOWN": {
+            "$ref": "#/$defs/error_category"
+          }
+        }
+      },
+      "retry_policies": {
+        "type": "object",
+        "description": "Declarative retry caps per category",
+        "additionalProperties": false,
+        "patternProperties": {
+          "^(NETWORK_ERROR|AUTH_ERROR|RATE_LIMIT|CONTENT_REJECTED|PLATFORM_THROTTLE|PLATFORM_BUG|CLIENT_BUG|UNKNOWN)$": {
+            "$ref": "#/$defs/retry_policy"
+          }
+        }
+      },
+      "severity_levels": {
+        "type": "array",
+        "description": "Ordered severity levels - used for alerting and kill switches",
+        "uniqueItems": true,
+        "minItems": 4,
+        "maxItems": 4,
+        "items": {
+          "type": "string",
+          "enum": [
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "CRITICAL"
+          ]
+        }
+      },
+      "global_invariants": {
+        "type": "array",
+        "uniqueItems": true,
+        "description": "System-wide error handling laws - violations are bugs",
+        "items": {
+          "type": "string",
+          "enum": [
+            "non_retryable_errors_are_terminal",
+            "critical_errors_trigger_audit",
+            "unknown_errors_are_never_ignored",
+            "suppression_signals_reduce_rollout",
+            "platform_bugs_are_never_retried_immediately",
+            "client_bugs_halt_rollout",
+            "auth_errors_quarantine_account",
+            "network_errors_do_not_affect_account_health"
+          ]
+        }
+      },
+      "failure_semantics": {
+        "type": "object",
+        "description": "What happens when an error cannot be mapped to taxonomy",
+        "required": ["on_unmappable_error"],
+        "properties": {
+          "on_unmappable_error": {
+            "type": "object",
+            "required": [
+              "category",
+              "severity",
+              "retryable",
+              "audit_entry"
+            ],
+            "properties": {
+              "category": {
+                "type": "string",
+                "const": "UNKNOWN"
+              },
+              "severity": {
+                "type": "string",
+                "const": "HIGH"
+              },
+              "retryable": {
+                "type": "boolean",
+                "const": false
+              },
+              "audit_entry": {
+                "type": "string",
+                "const": "MANDATORY"
+              },
+              "no_silent_fallback": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "classification_rules": {
+        "type": "object",
+        "description": "How posting_errors.py maps platform responses to categories",
+        "properties": {
+          "principles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "example_mappings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "NETWORK_ERROR",
+                "AUTH_ERROR",
+                "RATE_LIMIT",
+                "CONTENT_REJECTED",
+                "PLATFORM_THROTTLE",
+                "PLATFORM_BUG",
+                "CLIENT_BUG",
+                "UNKNOWN"
+              ]
+            }
+          }
+        }
+      },
+      "downstream_consumers": {
+        "type": "object",
+        "description": "Components that consume error taxonomy classifications",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "reads": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "action": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "metadata": {
+        "type": "object",
+        "description": "Annotation only - ignored by classification logic",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "Taxonomy version for auditing"
+          },
+          "last_updated": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last modification timestamp"
+          },
+          "mapping_responsibility": {
+            "type": "object",
+            "description": "Component responsibilities for error classification",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "Human-readable notes for maintainers"
+          }
+        }
+      }
+    }
+  }

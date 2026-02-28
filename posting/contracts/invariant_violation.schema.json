@@ -1,0 +1,1777 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://posting.system/contracts/invariant_violation.schema.json",
+    "title": "Canonical Invariant Violation Event Contract",
+    "description": "Authoritative schema for recording any breach of a system law. This schema binds detection → logging → escalation → shutdown into a single, governed artifact. Every invariant violation in the system must conform to this schema. Constitutional law enforcement, not logging convenience.",
+    
+    "type": "object",
+    "required": [
+      "schema_version",
+      "violation_id",
+      "timestamp",
+      "invariant",
+      "domain",
+      "severity",
+      "source",
+      "context",
+      "impact",
+      "recommended_action"
+    ],
+    "additionalProperties": false,
+    
+    "properties": {
+      "schema_version": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+\\.\\d+$",
+        "const": "1.0.0",
+        "description": "Semantic version of violation schema. Breaking changes require version bump. Backward compatible only.",
+        "examples": ["1.0.0"]
+      },
+      
+      "violation_id": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|^[a-f0-9]{64}$",
+        "description": "Globally unique identifier (UUID or SHA-256 hash). Used for deduplication, cross-system correlation, and audit trails. MUST be unique across all time.",
+        "examples": [
+          "550e8400-e29b-41d4-a716-446655440000",
+          "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ]
+      },
+      
+      "timestamp": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 9999999999999,
+        "description": "Unix epoch seconds (float allowed for sub-second precision) at detection time. Captured immediately when violation is detected.",
+        "examples": [1730000000.0, 1730000000.123]
+      },
+      
+      "invariant": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "description": "Canonical invariant identifier that was violated. Must map to invariants defined in state_transition.schema.json, error_taxonomy.schema.json, or platform_policy.schema.json.",
+        "examples": [
+          "terminal_state_is_absorbing",
+          "attempt_number_monotonic",
+          "posting_requires_valid_intent",
+          "terminal_states_are_absorbing",
+          "no_cross_domain_backward_transitions",
+          "no_silent_state_drift",
+          "timestamps_monotonic",
+          "account_state_precedes_posting",
+          "intent_immutable_after_claim",
+          "non_retryable_errors_are_terminal",
+          "critical_errors_trigger_audit",
+          "unknown_errors_are_never_ignored",
+          "suppression_signals_reduce_rollout",
+          "platform_bugs_are_never_retried_immediately",
+          "client_bugs_halt_rollout",
+          "auth_errors_quarantine_account",
+          "network_errors_do_not_affect_account_health",
+          "platform_policy_respected",
+          "rate_limit_enforced",
+          "audit_log_complete",
+          "data_encryption_required",
+          "credential_never_logged"
+        ]
+      },
+      
+      "domain": {
+        "type": "string",
+        "enum": ["intent", "posting", "account", "platform", "global"],
+        "description": "Scope of violation for routing and escalation. Used by kill switches and alerting systems to determine response scope.",
+        "examples": ["posting", "global"]
+      },
+      
+      "severity": {
+        "type": "string",
+        "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+        "description": "Ordered severity level. Directly gates kill switches. CRITICAL always triggers immediate action. Severity ordering: LOW < MEDIUM < HIGH < CRITICAL.",
+        "examples": ["HIGH", "CRITICAL"]
+      },
+      
+      "source": {
+        "type": "object",
+        "required": ["component", "file", "function"],
+        "additionalProperties": false,
+        "description": "Where the violation was detected. Mandatory for traceability and debugging.",
+        "properties": {
+          "component": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Component name that detected violation (e.g., posting_state_store, reconciliation, anomaly_detector)",
+            "examples": ["posting_state_store", "anomaly_detector", "reconciliation"]
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^[a-zA-Z0-9_/\\-\\.]+\\.(py|js|ts)$",
+            "description": "Source file where violation was detected (relative path from repository root)",
+            "examples": ["posting_state_store.py", "reconciliation.py", "anomaly_detector.py"]
+          },
+          "function": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+            "description": "Function or method name where violation was detected",
+            "examples": ["record_success", "validate_transition", "check_invariant"]
+          }
+        }
+      },
+      
+      "context": {
+        "type": "object",
+        "description": "Structured snapshot of relevant state at violation time. Never raw dumps. Only relevant fields that explain the violation. Must be JSON-serializable.",
+        "additionalProperties": true,
+        "properties": {
+          "intent_id": {
+            "type": "string",
+            "description": "Intent ID if violation relates to specific intent"
+          },
+          "account_id": {
+            "type": "string",
+            "description": "Account ID if violation relates to specific account"
+          },
+          "platform": {
+            "type": "string",
+            "enum": ["youtube", "tiktok", "instagram", "twitter", "linkedin"],
+            "description": "Platform name if violation relates to specific platform"
+          },
+          "current_state": {
+            "type": "string",
+            "description": "Current state value that violated invariant"
+          },
+          "attempted_state": {
+            "type": "string",
+            "description": "State that was attempted (for transition violations)"
+          },
+          "attempt_number": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Attempt number if relevant"
+          },
+          "previous_attempt_number": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Previous attempt number (for monotonicity violations)"
+          },
+          "error_category": {
+            "type": "string",
+            "enum": ["NETWORK_ERROR", "AUTH_ERROR", "RATE_LIMIT", "CONTENT_REJECTED", "PLATFORM_THROTTLE", "PLATFORM_BUG", "CLIENT_BUG", "UNKNOWN"],
+            "description": "Error category if violation relates to error taxonomy"
+          },
+          "policy_field": {
+            "type": "string",
+            "description": "Policy field that was violated"
+          },
+          "current_value": {
+            "description": "Current value that violated constraint (type varies by violation)"
+          },
+          "allowed_value": {
+            "description": "Allowed value for constraint (type varies by violation)"
+          },
+          "constraint": {
+            "type": "string",
+            "description": "Constraint identifier that was violated"
+          },
+          "transition_from": {
+            "type": "string",
+            "description": "Source state in invalid transition"
+          },
+          "transition_to": {
+            "type": "string",
+            "description": "Target state in invalid transition"
+          }
+        }
+      },
+      
+      "impact": {
+        "type": "object",
+        "required": [
+          "affected_intents",
+          "data_corruption_risk",
+          "external_exposure"
+        ],
+        "additionalProperties": false,
+        "description": "Impact assessment for triage and escalation. Required for all violations.",
+        "properties": {
+          "affected_intents": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of intents affected by this violation. 0 if no specific intents affected.",
+            "examples": [0, 1, 100]
+          },
+          "affected_accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true,
+            "description": "List of affected account IDs. Empty array if no specific accounts affected.",
+            "default": [],
+            "examples": [[], ["acct_123"], ["acct_123", "acct_456"]]
+          },
+          "data_corruption_risk": {
+            "type": "boolean",
+            "description": "Whether this violation indicates data corruption is possible or has occurred. CRITICAL if true.",
+            "examples": [false, true]
+          },
+          "external_exposure": {
+            "type": "boolean",
+            "description": "Whether violation has exposed or could expose data to external systems or users. HIGH or CRITICAL if true.",
+            "examples": [false, true]
+          },
+          "system_wide": {
+            "type": "boolean",
+            "description": "Whether violation affects entire system rather than specific intents/accounts. Automatically true if domain is 'global'.",
+            "default": false
+          },
+          "irreversible": {
+            "type": "boolean",
+            "description": "Whether violation has caused irreversible state changes. CRITICAL if true.",
+            "default": false
+          }
+        }
+      },
+      
+      "recommended_action": {
+        "type": "string",
+        "enum": [
+          "halt_dispatcher",
+          "freeze_account",
+          "manual_review_required",
+          "no_action_observational",
+          "rollback_state",
+          "emergency_shutdown",
+          "quarantine_account",
+          "reduce_rollout",
+          "alert_only"
+        ],
+        "description": "Declarative remediation guidance consumed by kill_switches.py. Determines automatic system response.",
+        "examples": ["halt_dispatcher", "freeze_account"]
+      },
+      
+      "metadata": {
+        "type": "object",
+        "description": "Annotations only. Ignored by enforcement logic. Used for operational context and debugging.",
+        "additionalProperties": true,
+        "properties": {
+          "build_id": {
+            "type": "string",
+            "description": "Build or deployment identifier",
+            "examples": ["v1.2.3", "deploy-20240115-abc123"]
+          },
+          "environment": {
+            "type": "string",
+            "enum": ["development", "staging", "production"],
+            "description": "Environment where violation occurred"
+          },
+          "correlation_id": {
+            "type": "string",
+            "description": "Correlation ID for tracing across services"
+          },
+          "operator": {
+            "type": "string",
+            "description": "Operator or automated system that created this violation record"
+          },
+          "detection_method": {
+            "type": "string",
+            "enum": ["runtime_check", "reconciliation", "anomaly_detection", "manual_review", "automated_test"],
+            "description": "Method by which violation was detected"
+          },
+          "related_violation_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "IDs of related violations (e.g., cascading violations)"
+          },
+          "stack_trace": {
+            "type": "string",
+            "description": "Stack trace if available (truncated to reasonable length)"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "Human-readable notes for investigation"
+          }
+        }
+      }
+    },
+    
+    "$defs": {
+      "invariant_catalog": {
+        "description": "Complete catalog of known invariants mapped to their domains and default severities. These invariants are defined in state_transition.schema.json, error_taxonomy.schema.json, and platform_policy.schema.json.",
+        "type": "object",
+        "properties": {
+          "state_transition_invariants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "invariant": {
+                  "type": "string",
+                  "enum": [
+                    "terminal_states_are_absorbing",
+                    "attempt_number_monotonic",
+                    "no_cross_domain_backward_transitions",
+                    "posting_requires_intent",
+                    "no_silent_state_drift",
+                    "timestamps_monotonic",
+                    "account_state_precedes_posting",
+                    "intent_immutable_after_claim"
+                  ]
+                },
+                "domain": {
+                  "type": "string",
+                  "enum": ["intent", "posting", "account", "platform", "global"]
+                },
+                "default_severity": {
+                  "type": "string",
+                  "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+                }
+              },
+              "required": ["invariant", "domain", "default_severity"]
+            }
+          },
+          "error_taxonomy_invariants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "invariant": {
+                  "type": "string",
+                  "enum": [
+                    "non_retryable_errors_are_terminal",
+                    "critical_errors_trigger_audit",
+                    "unknown_errors_are_never_ignored",
+                    "suppression_signals_reduce_rollout",
+                    "platform_bugs_are_never_retried_immediately",
+                    "client_bugs_halt_rollout",
+                    "auth_errors_quarantine_account",
+                    "network_errors_do_not_affect_account_health"
+                  ]
+                },
+                "domain": {
+                  "type": "string",
+                  "enum": ["intent", "posting", "account", "platform", "global"]
+                },
+                "default_severity": {
+                  "type": "string",
+                  "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+                }
+              },
+              "required": ["invariant", "domain", "default_severity"]
+            }
+          },
+          "platform_policy_invariants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "invariant": {
+                  "type": "string",
+                  "enum": [
+                    "platform_policy_respected",
+                    "rate_limit_enforced",
+                    "audit_log_complete",
+                    "data_encryption_required",
+                    "credential_never_logged"
+                  ]
+                },
+                "domain": {
+                  "type": "string",
+                  "enum": ["intent", "posting", "account", "platform", "global"]
+                },
+                "default_severity": {
+                  "type": "string",
+                  "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+                }
+              },
+              "required": ["invariant", "domain", "default_severity"]
+            }
+          }
+        }
+      },
+      
+      "enforcement_matrix": {
+        "description": "Components and their roles in violation handling. No component may swallow violations.",
+        "type": "object",
+        "properties": {
+          "emission": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "posting_state_store.py",
+                "reconciliation.py",
+                "anomaly_detector.py",
+                "audit_logger.py",
+                "kill_switches.py",
+                "risk_evaluator.py",
+                "rollout_controller.py",
+                "platform_errors.py"
+              ]
+            },
+            "description": "Components that emit violations"
+          },
+          "persistence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": ["audit_logger.py"],
+            "description": "Components that persist violations"
+          },
+          "enforcement": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": ["kill_switches.py"],
+            "description": "Components that enforce recommended actions"
+          },
+          "notification": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": ["alerting.py", "anomaly_detector.py"],
+            "description": "Components that notify operators"
+          }
+        }
+      },
+      
+      "severity_action_mapping": {
+        "description": "Mapping from severity to default actions if recommended_action not specified",
+        "type": "object",
+        "properties": {
+          "CRITICAL": {
+            "type": "string",
+            "enum": ["halt_dispatcher", "emergency_shutdown"],
+            "default": "halt_dispatcher"
+          },
+          "HIGH": {
+            "type": "string",
+            "enum": ["freeze_account", "reduce_rollout", "manual_review_required"],
+            "default": "freeze_account"
+          },
+          "MEDIUM": {
+            "type": "string",
+            "enum": ["manual_review_required", "alert_only"],
+            "default": "manual_review_required"
+          },
+          "LOW": {
+            "type": "string",
+            "enum": ["no_action_observational", "alert_only"],
+            "default": "no_action_observational"
+          }
+        }
+      },
+      
+      "failure_semantics": {
+        "description": "What happens when violation cannot be serialized or persisted. Silence is not permitted.",
+        "type": "object",
+        "properties": {
+          "on_serialization_failure": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["safe_mode", "halt_dispatcher", "emergency_shutdown"],
+                "default": "safe_mode"
+              },
+              "audit_entry": {
+                "type": "string",
+                "enum": ["MANDATORY"],
+                "const": "MANDATORY"
+              },
+              "description": {
+                "type": "string",
+                "const": "If a violation cannot be serialized: System enters safe mode, Dispatcher halts, Audit entry forced"
+              }
+            }
+          },
+          "on_persistence_failure": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": ["safe_mode", "halt_dispatcher", "emergency_shutdown"],
+                "default": "halt_dispatcher"
+              },
+              "retry": {
+                "type": "boolean",
+                "default": true
+              },
+              "max_retries": {
+                "type": "integer",
+                "default": 3
+              },
+              "description": {
+                "type": "string",
+                "const": "If violation cannot be persisted: Retry with exponential backoff, If all retries fail: Halt dispatcher, Force emergency audit entry"
+              }
+            }
+          }
+        }
+      },
+      
+      "validation_rules": {
+        "description": "Additional validation rules beyond JSON schema",
+        "type": "object",
+        "properties": {
+          "severity_impact_consistency": {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string",
+                "const": "If data_corruption_risk=true OR external_exposure=true, severity MUST be HIGH or CRITICAL"
+              },
+              "rule2": {
+                "type": "string",
+                "const": "If domain=global, impact.system_wide MUST be true"
+              },
+              "rule3": {
+                "type": "string",
+                "const": "If recommended_action=emergency_shutdown, severity MUST be CRITICAL"
+              },
+              "rule4": {
+                "type": "string",
+                "const": "If recommended_action=halt_dispatcher, severity MUST be HIGH or CRITICAL"
+              }
+            }
+          },
+          "invariant_domain_mapping": {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string",
+                "const": "invariant MUST map to a known invariant from state_transition, error_taxonomy, or platform_policy schemas"
+              },
+              "rule2": {
+                "type": "string",
+                "const": "domain MUST match the domain of the invariant definition"
+              }
+            }
+          },
+          "timestamp_validity": {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string",
+                "const": "timestamp MUST be within reasonable bounds (not future beyond clock skew, not ancient)"
+              }
+            }
+          },
+          "violation_id_uniqueness": {
+            "type": "object",
+            "properties": {
+              "rule": {
+                "type": "string",
+                "const": "violation_id MUST be globally unique. Duplicate IDs indicate system corruption."
+              }
+            }
+          }
+        }
+      },
+      
+      "example_violations": {
+        "description": "Canonical examples of properly formatted violations for each violation type. Use these as templates.",
+        "type": "object",
+        "properties": {
+          "terminal_state_violation": {
+            "type": "object",
+            "properties": {
+              "schema_version": {"const": "1.0.0"},
+              "violation_id": {"type": "string"},
+              "timestamp": {"type": "number"},
+              "invariant": {"const": "terminal_states_are_absorbing"},
+              "domain": {"const": "posting"},
+              "severity": {"const": "CRITICAL"},
+              "source": {
+                "type": "object",
+                "properties": {
+                  "component": {"const": "posting_state_store"},
+                  "file": {"const": "posting_state_store.py"},
+                  "function": {"const": "record_success"}
+                }
+              },
+              "context": {
+                "type": "object",
+                "properties": {
+                  "intent_id": {"type": "string"},
+                  "current_state": {"const": "POSTED"},
+                  "attempted_state": {"const": "QUEUED"}
+                }
+              },
+              "impact": {
+                "type": "object",
+                "properties": {
+                  "affected_intents": {"const": 1},
+                  "data_corruption_risk": {"const": true},
+                  "external_exposure": {"const": false}
+                }
+              },
+              "recommended_action": {"const": "halt_dispatcher"}
+            }
+          },
+          "monotonic_violation": {
+            "type": "object",
+            "properties": {
+              "schema_version": {"const": "1.0.0"},
+              "violation_id": {"type": "string"},
+              "timestamp": {"type": "number"},
+              "invariant": {"const": "attempt_number_monotonic"},
+              "domain": {"const": "posting"},
+              "severity": {"const": "HIGH"},
+              "source": {
+                "type": "object",
+                "properties": {
+                  "component": {"const": "posting_state_store"},
+                  "file": {"const": "posting_state_store.py"},
+                  "function": {"const": "increment_attempt"}
+                }
+              },
+              "context": {
+                "type": "object",
+                "properties": {
+                  "intent_id": {"type": "string"},
+                  "current_attempt": {"type": "integer"},
+                  "new_attempt": {"type": "integer"}
+                }
+              },
+              "impact": {
+                "type": "object",
+                "properties": {
+                  "affected_intents": {"const": 1},
+                  "data_corruption_risk": {"const": true},
+                  "external_exposure": {"const": false}
+                }
+              },
+              "recommended_action": {"const": "rollback_state"}
+            }
+          },
+          "policy_violation": {
+            "type": "object",
+            "properties": {
+              "schema_version": {"const": "1.0.0"},
+              "violation_id": {"type": "string"},
+              "timestamp": {"type": "number"},
+              "invariant": {"const": "platform_policy_respected"},
+              "domain": {"const": "platform"},
+              "severity": {"const": "HIGH"},
+              "source": {
+                "type": "object",
+                "properties": {
+                  "component": {"const": "platform_policy_enforcer"},
+                  "file": {"const": "platform_policy.py"},
+                  "function": {"const": "validate_post_intent"}
+                }
+              },
+              "context": {
+                "type": "object",
+                "properties": {
+                  "platform": {"type": "string"},
+                  "constraint": {"type": "string"},
+                  "current_value": {"type": "string"},
+                  "allowed_value": {"type": "string"}
+                }
+              },
+              "impact": {
+                "type": "object",
+                "properties": {
+                  "affected_intents": {"const": 1},
+                  "affected_accounts": {"type": "array"},
+                  "data_corruption_risk": {"const": false},
+                  "external_exposure": {"const": true}
+                }
+              },
+              "recommended_action": {"const": "freeze_account"}
+            }
+          },
+          "audit_violation": {
+            "type": "object",
+            "properties": {
+              "schema_version": {"const": "1.0.0"},
+              "violation_id": {"type": "string"},
+              "timestamp": {"type": "number"},
+              "invariant": {"const": "audit_log_complete"},
+              "domain": {"const": "global"},
+              "severity": {"const": "CRITICAL"},
+              "source": {
+                "type": "object",
+                "properties": {
+                  "component": {"const": "audit_logger"},
+                  "file": {"const": "audit_logger.py"},
+                  "function": {"const": "write_audit"}
+                }
+              },
+              "context": {
+                "type": "object",
+                "properties": {
+                  "intent_id": {"type": "string"},
+                  "missing_field": {"type": "string"}
+                }
+              },
+              "impact": {
+                "type": "object",
+                "properties": {
+                  "affected_intents": {"type": "integer"},
+                  "system_wide": {"const": true},
+                  "data_corruption_risk": {"const": false},
+                  "external_exposure": {"const": false}
+                }
+              },
+              "recommended_action": {"const": "emergency_shutdown"}
+            }
+          }
+        }
+      }
+    },
+    
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "impact": {
+              "properties": {
+                "data_corruption_risk": {
+                  "const": true
+                }
+              }
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "severity": {
+              "enum": ["HIGH", "CRITICAL"]
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "impact": {
+              "properties": {
+                "external_exposure": {
+                  "const": true
+                }
+              }
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "severity": {
+              "enum": ["HIGH", "CRITICAL"]
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "recommended_action": {
+              "const": "emergency_shutdown"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "severity": {
+              "const": "CRITICAL"
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "domain": {
+              "const": "global"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "impact": {
+              "properties": {
+                "system_wide": {
+                  "const": true
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+
+
+
+
+
+
+"""
+OR
+"""
+
+
+# /posting/contracts/invariant_violation.schema.json
+# Canonical Invariant Violation Event Contract
+# Constitutional Law Enforcement for System Invariants
+
+import json
+import os
+import time
+import uuid
+import hashlib
+from typing import Dict, Any, Optional, List, Set
+from dataclasses import dataclass, field
+from enum import Enum
+from pathlib import Path
+import jsonschema
+
+
+# ============================================================================
+# SCHEMA DEFINITION
+# ============================================================================
+
+INVARIANT_VIOLATION_SCHEMA = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://posting.system/contracts/invariant_violation.schema.json",
+    "title": "Invariant Violation Event Schema",
+    "description": "Authoritative contract for system invariant breach events",
+    "type": "object",
+    "required": [
+        "schema_version",
+        "violation_id",
+        "timestamp",
+        "invariant",
+        "domain",
+        "severity",
+        "source",
+        "context",
+        "impact",
+        "recommended_action"
+    ],
+    "additionalProperties": False,
+    "properties": {
+        "schema_version": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$",
+            "description": "Semantic version of violation schema"
+        },
+        "violation_id": {
+            "type": "string",
+            "description": "Globally unique violation identifier (UUID or hash)"
+        },
+        "timestamp": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Unix epoch seconds at detection time"
+        },
+        "invariant": {
+            "type": "string",
+            "description": "Canonical invariant identifier that was violated",
+            "examples": [
+                "terminal_state_is_absorbing",
+                "attempt_number_monotonic",
+                "posting_requires_valid_intent"
+            ]
+        },
+        "domain": {
+            "type": "string",
+            "enum": ["intent", "posting", "account", "platform", "global"],
+            "description": "Scope of violation for routing and escalation"
+        },
+        "severity": {
+            "type": "string",
+            "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+            "description": "Ordered severity level (gates kill switches)"
+        },
+        "source": {
+            "type": "object",
+            "required": ["component", "file", "function"],
+            "additionalProperties": False,
+            "properties": {
+                "component": {
+                    "type": "string",
+                    "description": "Component that detected violation"
+                },
+                "file": {
+                    "type": "string",
+                    "description": "Source file where detected"
+                },
+                "function": {
+                    "type": "string",
+                    "description": "Function where detected"
+                }
+            }
+        },
+        "context": {
+            "type": "object",
+            "description": "Structured snapshot of relevant state (no raw dumps)",
+            "properties": {
+                "intent_id": {"type": "string"},
+                "account_id": {"type": "string"},
+                "current_state": {"type": "string"},
+                "attempt_number": {"type": "integer"},
+                "platform": {"type": "string"}
+            }
+        },
+        "impact": {
+            "type": "object",
+            "required": [
+                "affected_intents",
+                "data_corruption_risk",
+                "external_exposure"
+            ],
+            "additionalProperties": False,
+            "properties": {
+                "affected_intents": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Number of intents affected"
+                },
+                "affected_accounts": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of affected account IDs"
+                },
+                "data_corruption_risk": {
+                    "type": "boolean",
+                    "description": "Whether data corruption is possible"
+                },
+                "external_exposure": {
+                    "type": "boolean",
+                    "description": "Whether violation exposed to external systems"
+                }
+            }
+        },
+        "recommended_action": {
+            "type": "string",
+            "enum": [
+                "halt_dispatcher",
+                "freeze_account",
+                "manual_review_required",
+                "no_action_observational",
+                "rollback_state",
+                "emergency_shutdown"
+            ],
+            "description": "Declarative remediation guidance for kill switches"
+        },
+        "metadata": {
+            "type": "object",
+            "description": "Annotations only, ignored by enforcement logic",
+            "properties": {
+                "build_id": {"type": "string"},
+                "environment": {"type": "string"},
+                "correlation_id": {"type": "string"},
+                "operator": {"type": "string"}
+            }
+        }
+    }
+}
+
+
+# ============================================================================
+# ENUMERATIONS
+# ============================================================================
+
+class ViolationDomain(Enum):
+    """Violation scope domains"""
+    INTENT = "intent"
+    POSTING = "posting"
+    ACCOUNT = "account"
+    PLATFORM = "platform"
+    GLOBAL = "global"
+
+
+class ViolationSeverity(Enum):
+    """Ordered severity levels"""
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+    def __lt__(self, other):
+        order = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+        return order.index(self.value) < order.index(other.value)
+
+    def __le__(self, other):
+        return self == other or self < other
+
+
+class RecommendedAction(Enum):
+    """Declarative remediation actions"""
+    HALT_DISPATCHER = "halt_dispatcher"
+    FREEZE_ACCOUNT = "freeze_account"
+    MANUAL_REVIEW = "manual_review_required"
+    OBSERVATIONAL = "no_action_observational"
+    ROLLBACK_STATE = "rollback_state"
+    EMERGENCY_SHUTDOWN = "emergency_shutdown"
+
+
+# ============================================================================
+# DATA STRUCTURES
+# ============================================================================
+
+@dataclass(frozen=True)
+class ViolationSource:
+    """Source location of violation detection"""
+    component: str
+    file: str
+    function: str
+
+    def to_dict(self) -> Dict[str, str]:
+        return {
+            "component": self.component,
+            "file": self.file,
+            "function": self.function
+        }
+
+
+@dataclass(frozen=True)
+class ViolationImpact:
+    """Impact assessment of violation"""
+    affected_intents: int
+    data_corruption_risk: bool
+    external_exposure: bool
+    affected_accounts: tuple = field(default_factory=tuple)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "affected_intents": self.affected_intents,
+            "affected_accounts": list(self.affected_accounts),
+            "data_corruption_risk": self.data_corruption_risk,
+            "external_exposure": self.external_exposure
+        }
+
+
+@dataclass(frozen=True)
+class InvariantViolation:
+    """Immutable invariant violation event"""
+    schema_version: str
+    violation_id: str
+    timestamp: float
+    invariant: str
+    domain: ViolationDomain
+    severity: ViolationSeverity
+    source: ViolationSource
+    context: Dict[str, Any]
+    impact: ViolationImpact
+    recommended_action: RecommendedAction
+    metadata: Dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization"""
+        return {
+            "schema_version": self.schema_version,
+            "violation_id": self.violation_id,
+            "timestamp": self.timestamp,
+            "invariant": self.invariant,
+            "domain": self.domain.value,
+            "severity": self.severity.value,
+            "source": self.source.to_dict(),
+            "context": self.context,
+            "impact": self.impact.to_dict(),
+            "recommended_action": self.recommended_action.value,
+            "metadata": self.metadata
+        }
+
+    def to_json(self) -> str:
+        """Serialize to JSON string"""
+        return json.dumps(self.to_dict(), indent=2)
+
+    def is_critical(self) -> bool:
+        """Check if violation is critical severity"""
+        return self.severity == ViolationSeverity.CRITICAL
+
+    def requires_shutdown(self) -> bool:
+        """Check if violation requires system shutdown"""
+        return self.recommended_action in [
+            RecommendedAction.HALT_DISPATCHER,
+            RecommendedAction.EMERGENCY_SHUTDOWN
+        ]
+
+
+# ============================================================================
+# VIOLATION BUILDER
+# ============================================================================
+
+class ViolationBuilder:
+    """
+    Fluent builder for invariant violations.
+    
+    Automatically applies default severity and domain from InvariantRegistry
+    if not explicitly set. Validates against authoritative JSON schema on build.
+    """
+
+    def __init__(self, invariant: str, violation_id: Optional[str] = None):
+        self.schema_version = "1.0.0"
+        self.violation_id = violation_id or str(uuid.uuid4())
+        self.timestamp = time.time()
+        self.invariant = invariant
+        self._domain: Optional[ViolationDomain] = None
+        self._severity: Optional[ViolationSeverity] = None
+        self._source: Optional[ViolationSource] = None
+        self._context: Dict[str, Any] = {}
+        self._impact: Optional[ViolationImpact] = None
+        self._action: Optional[RecommendedAction] = None
+        self._metadata: Dict[str, str] = {}
+        
+        # Auto-apply defaults from registry if available
+        if InvariantRegistry.is_known(invariant):
+            if self._domain is None:
+                self._domain = InvariantRegistry.get_default_domain(invariant)
+            if self._severity is None:
+                self._severity = InvariantRegistry.get_default_severity(invariant)
+
+    def in_domain(self, domain: ViolationDomain) -> 'ViolationBuilder':
+        self._domain = domain
+        return self
+
+    def with_severity(self, severity: ViolationSeverity) -> 'ViolationBuilder':
+        self._severity = severity
+        return self
+
+    def detected_in(
+        self,
+        component: str,
+        file: str,
+        function: str
+    ) -> 'ViolationBuilder':
+        self._source = ViolationSource(component, file, function)
+        return self
+
+    def with_context(self, **context) -> 'ViolationBuilder':
+        self._context.update(context)
+        return self
+
+    def with_impact(
+        self,
+        affected_intents: int = 0,
+        affected_accounts: List[str] = None,
+        data_corruption_risk: bool = False,
+        external_exposure: bool = False
+    ) -> 'ViolationBuilder':
+        self._impact = ViolationImpact(
+            affected_intents=affected_intents,
+            data_corruption_risk=data_corruption_risk,
+            external_exposure=external_exposure,
+            affected_accounts=tuple(affected_accounts or [])
+        )
+        return self
+
+    def recommends(self, action: RecommendedAction) -> 'ViolationBuilder':
+        self._action = action
+        return self
+
+    def with_metadata(self, **metadata) -> 'ViolationBuilder':
+        self._metadata.update(metadata)
+        return self
+
+    def build(self) -> InvariantViolation:
+        """
+        Build immutable violation with comprehensive validation.
+        
+        Validates:
+        - All required fields present
+        - JSON schema compliance
+        - Business rule consistency
+        
+        Raises:
+            ValueError: If violation is incomplete or invalid
+        """
+        if not all([self._domain, self._severity, self._source, self._impact, self._action]):
+            missing = []
+            if not self._domain: missing.append("domain")
+            if not self._severity: missing.append("severity")
+            if not self._source: missing.append("source")
+            if not self._impact: missing.append("impact")
+            if not self._action: missing.append("recommended_action")
+            raise ValueError(f"Incomplete violation: missing required fields: {', '.join(missing)}")
+
+        violation = InvariantViolation(
+            schema_version=self.schema_version,
+            violation_id=self.violation_id,
+            timestamp=self.timestamp,
+            invariant=self.invariant,
+            domain=self._domain,
+            severity=self._severity,
+            source=self._source,
+            context=self._context,
+            impact=self._impact,
+            recommended_action=self._action,
+            metadata=self._metadata
+        )
+        
+        # Validate against authoritative schema
+        validator = ViolationValidator()
+        is_valid, errors = validator.validate_violation(violation)
+        if not is_valid:
+            raise ValueError(f"Invalid violation (schema/business rules): {'; '.join(errors)}")
+        
+        return violation
+
+
+# ============================================================================
+# VALIDATION
+# ============================================================================
+
+class ViolationValidator:
+    """
+    Validates violations against authoritative JSON schema.
+    
+    Loads schema from /posting/contracts/invariant_violation.schema.json
+    and performs comprehensive validation including business rules.
+    """
+
+    def __init__(self, schema_path: Optional[Path] = None):
+        """
+        Initialize validator with authoritative JSON schema.
+        
+        Args:
+            schema_path: Path to JSON schema file. Defaults to contracts directory.
+        """
+        if schema_path is None:
+            # Load from contracts directory (authoritative source)
+            contracts_dir = Path(__file__).parent.parent / "contracts"
+            schema_path = contracts_dir / "invariant_violation.schema.json"
+        
+        try:
+            with open(schema_path, 'r') as f:
+                self.schema = json.load(f)
+        except FileNotFoundError:
+            # Fallback to embedded schema if contracts file not found
+            self.schema = INVARIANT_VIOLATION_SCHEMA
+        
+        self.validator = jsonschema.Draft202012Validator(self.schema)
+        self._logged_ids: Set[str] = set()
+
+    def validate(self, violation_data: Dict[str, Any]) -> tuple[bool, List[str]]:
+        """
+        Validate violation data against schema with comprehensive business rules.
+        Returns (is_valid, error_messages).
+        
+        Performs:
+        - JSON schema validation
+        - Cross-field business rule validation
+        - Uniqueness checking (if enabled)
+        """
+        errors = []
+        
+        # JSON schema validation
+        for error in self.validator.iter_errors(violation_data):
+            path = '.'.join(str(p) for p in error.path)
+            errors.append(f"{path}: {error.message}")
+        
+        # Additional business rule validation
+        business_errors = self._validate_business_rules(violation_data)
+        errors.extend(business_errors)
+        
+        return len(errors) == 0, errors
+    
+    def _validate_business_rules(self, violation_data: Dict[str, Any]) -> List[str]:
+        """Validate business rules beyond JSON schema"""
+        errors = []
+        
+        impact = violation_data.get("impact", {})
+        severity = violation_data.get("severity")
+        domain = violation_data.get("domain")
+        recommended_action = violation_data.get("recommended_action")
+        
+        # Rule: data_corruption_risk or external_exposure requires HIGH/CRITICAL severity
+        if impact.get("data_corruption_risk") or impact.get("external_exposure"):
+            if severity not in ["HIGH", "CRITICAL"]:
+                errors.append(
+                    f"severity: Must be HIGH or CRITICAL when "
+                    f"data_corruption_risk={impact.get('data_corruption_risk')} or "
+                    f"external_exposure={impact.get('external_exposure')}"
+                )
+        
+        # Rule: global domain requires system_wide=true
+        if domain == "global":
+            if not impact.get("system_wide", False):
+                errors.append(
+                    "impact.system_wide: Must be true when domain is 'global'"
+                )
+        
+        # Rule: emergency_shutdown requires CRITICAL severity
+        if recommended_action == "emergency_shutdown":
+            if severity != "CRITICAL":
+                errors.append(
+                    f"severity: Must be CRITICAL when recommended_action is 'emergency_shutdown'"
+                )
+        
+        # Rule: halt_dispatcher requires HIGH or CRITICAL severity
+        if recommended_action == "halt_dispatcher":
+            if severity not in ["HIGH", "CRITICAL"]:
+                errors.append(
+                    f"severity: Must be HIGH or CRITICAL when recommended_action is 'halt_dispatcher'"
+                )
+        
+        # Rule: violation_id uniqueness (if tracking enabled)
+        violation_id = violation_data.get("violation_id")
+        if violation_id:
+            if violation_id in self._logged_ids:
+                errors.append(
+                    f"violation_id: Duplicate violation ID detected: {violation_id}"
+                )
+        
+        return errors
+
+    def validate_violation(self, violation: InvariantViolation) -> tuple[bool, List[str]]:
+        """Validate InvariantViolation object"""
+        return self.validate(violation.to_dict())
+    
+    def mark_violation_id_seen(self, violation_id: str):
+        """Mark violation ID as seen for uniqueness tracking"""
+        self._logged_ids.add(violation_id)
+
+
+# ============================================================================
+# VIOLATION REGISTRY
+# ============================================================================
+
+class InvariantRegistry:
+    """Registry of known invariants and their metadata"""
+
+    KNOWN_INVARIANTS = {
+        # State Transition Invariants
+        "terminal_state_is_absorbing": {
+            "domain": ViolationDomain.POSTING,
+            "default_severity": ViolationSeverity.CRITICAL,
+            "description": "Terminal states (POSTED, FAILED) cannot transition"
+        },
+        "attempt_number_monotonic": {
+            "domain": ViolationDomain.POSTING,
+            "default_severity": ViolationSeverity.HIGH,
+            "description": "Attempt numbers must only increase"
+        },
+        "state_transition_valid": {
+            "domain": ViolationDomain.POSTING,
+            "default_severity": ViolationSeverity.HIGH,
+            "description": "State transitions must follow allowed paths"
+        },
+
+        # Intent Invariants
+        "posting_requires_valid_intent": {
+            "domain": ViolationDomain.INTENT,
+            "default_severity": ViolationSeverity.CRITICAL,
+            "description": "Cannot post without valid intent schema"
+        },
+        "intent_id_unique": {
+            "domain": ViolationDomain.INTENT,
+            "default_severity": ViolationSeverity.CRITICAL,
+            "description": "Intent IDs must be globally unique"
+        },
+
+        # Account Invariants
+        "account_state_consistent": {
+            "domain": ViolationDomain.ACCOUNT,
+            "default_severity": ViolationSeverity.HIGH,
+            "description": "Account state must be internally consistent"
+        },
+        "credential_never_logged": {
+            "domain": ViolationDomain.ACCOUNT,
+            "default_severity": ViolationSeverity.CRITICAL,
+            "description": "Credentials must never appear in logs"
+        },
+
+        # Platform Invariants
+        "platform_policy_respected": {
+            "domain": ViolationDomain.PLATFORM,
+            "default_severity": ViolationSeverity.HIGH,
+            "description": "Platform policies must be enforced"
+        },
+        "rate_limit_enforced": {
+            "domain": ViolationDomain.PLATFORM,
+            "default_severity": ViolationSeverity.MEDIUM,
+            "description": "Rate limits must be respected"
+        },
+
+        # Global Invariants
+        "audit_log_complete": {
+            "domain": ViolationDomain.GLOBAL,
+            "default_severity": ViolationSeverity.CRITICAL,
+            "description": "All state changes must be audited"
+        },
+        "data_encryption_required": {
+            "domain": ViolationDomain.GLOBAL,
+            "default_severity": ViolationSeverity.CRITICAL,
+            "description": "Sensitive data must be encrypted"
+        }
+    }
+
+    @classmethod
+    def is_known(cls, invariant: str) -> bool:
+        """Check if invariant is registered"""
+        return invariant in cls.KNOWN_INVARIANTS
+
+    @classmethod
+    def get_default_severity(cls, invariant: str) -> ViolationSeverity:
+        """Get default severity for invariant"""
+        if invariant in cls.KNOWN_INVARIANTS:
+            return cls.KNOWN_INVARIANTS[invariant]["default_severity"]
+        return ViolationSeverity.MEDIUM
+
+    @classmethod
+    def get_default_domain(cls, invariant: str) -> ViolationDomain:
+        """Get default domain for invariant"""
+        if invariant in cls.KNOWN_INVARIANTS:
+            return cls.KNOWN_INVARIANTS[invariant]["domain"]
+        return ViolationDomain.GLOBAL
+
+
+# ============================================================================
+# VIOLATION DETECTOR
+# ============================================================================
+
+class ViolationDetector:
+    """Base class for invariant violation detection"""
+
+    def __init__(self, component: str, file: str):
+        self.component = component
+        self.file = file
+        self._violations: List[InvariantViolation] = []
+
+    def detect_terminal_state_violation(
+        self,
+        intent_id: str,
+        current_state: str,
+        attempted_state: str,
+        function: str
+    ) -> Optional[InvariantViolation]:
+        """Detect terminal state absorption violation"""
+        terminal_states = {"POSTED", "FAILED"}
+        
+        if current_state in terminal_states:
+            violation = (
+                ViolationBuilder("terminal_state_is_absorbing")
+                .in_domain(ViolationDomain.POSTING)
+                .with_severity(ViolationSeverity.CRITICAL)
+                .detected_in(self.component, self.file, function)
+                .with_context(
+                    intent_id=intent_id,
+                    current_state=current_state,
+                    attempted_state=attempted_state
+                )
+                .with_impact(
+                    affected_intents=1,
+                    data_corruption_risk=True,
+                    external_exposure=False
+                )
+                .recommends(RecommendedAction.HALT_DISPATCHER)
+                .build()
+            )
+            self._violations.append(violation)
+            return violation
+        return None
+
+    def detect_monotonic_violation(
+        self,
+        intent_id: str,
+        current_attempt: int,
+        new_attempt: int,
+        function: str
+    ) -> Optional[InvariantViolation]:
+        """Detect attempt number monotonicity violation"""
+        if new_attempt <= current_attempt:
+            violation = (
+                ViolationBuilder("attempt_number_monotonic")
+                .in_domain(ViolationDomain.POSTING)
+                .with_severity(ViolationSeverity.HIGH)
+                .detected_in(self.component, self.file, function)
+                .with_context(
+                    intent_id=intent_id,
+                    current_attempt=current_attempt,
+                    new_attempt=new_attempt
+                )
+                .with_impact(
+                    affected_intents=1,
+                    data_corruption_risk=True,
+                    external_exposure=False
+                )
+                .recommends(RecommendedAction.ROLLBACK_STATE)
+                .build()
+            )
+            self._violations.append(violation)
+            return violation
+        return None
+
+    def detect_policy_violation(
+        self,
+        platform: str,
+        constraint: str,
+        current_value: Any,
+        allowed_value: Any,
+        function: str,
+        affected_accounts: List[str] = None
+    ) -> Optional[InvariantViolation]:
+        """Detect platform policy violation"""
+        violation = (
+            ViolationBuilder("platform_policy_respected")
+            .in_domain(ViolationDomain.PLATFORM)
+            .with_severity(ViolationSeverity.HIGH)
+            .detected_in(self.component, self.file, function)
+            .with_context(
+                platform=platform,
+                constraint=constraint,
+                current_value=str(current_value),
+                allowed_value=str(allowed_value)
+            )
+            .with_impact(
+                affected_intents=1,
+                affected_accounts=affected_accounts or [],
+                data_corruption_risk=False,
+                external_exposure=True
+            )
+            .recommends(RecommendedAction.FREEZE_ACCOUNT)
+            .build()
+        )
+        self._violations.append(violation)
+        return violation
+
+    def get_violations(self) -> List[InvariantViolation]:
+        """Get all detected violations"""
+        return self._violations.copy()
+
+    def has_critical_violations(self) -> bool:
+        """Check if any critical violations detected"""
+        return any(v.is_critical() for v in self._violations)
+
+
+# ============================================================================
+# VIOLATION PERSISTENCE
+# ============================================================================
+
+class ViolationLogger:
+    """
+    Persistent logging of violations with fail-safe semantics.
+    
+    Per specification:
+    - If violation cannot be serialized: System enters safe mode, Dispatcher halts, Audit entry forced
+    - If violation cannot be persisted: Retry with exponential backoff, If all retries fail: Halt dispatcher
+    - Silence is not permitted.
+    """
+
+    def __init__(self, log_dir: Path, validator: Optional[ViolationValidator] = None):
+        self.log_dir = log_dir
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.validator = validator or ViolationValidator()
+        self._logged_ids: Set[str] = set()
+        self._max_retries = 3
+        self._retry_delays = [0.1, 0.5, 2.0]  # Exponential backoff in seconds
+
+    def log_violation(self, violation: InvariantViolation) -> bool:
+        """
+        Log violation to persistent storage with comprehensive validation.
+        
+        Returns True if successful, False otherwise.
+        
+        CRITICAL: If this fails, system enters safe mode per failure semantics.
+        Per specification: "If a violation cannot be serialized: System enters safe mode"
+        """
+        # Validate before logging (comprehensive validation)
+        is_valid, errors = self.validator.validate_violation(violation)
+        if not is_valid:
+            # Cannot log invalid violation - CRITICAL FAILURE
+            error_msg = f"INVALID VIOLATION: {errors}"
+            self._emergency_log(error_msg)
+            # Enter safe mode per failure semantics
+            self._trigger_safe_mode("validation_failure", error_msg)
+            return False
+
+        # Deduplicate
+        if violation.violation_id in self._logged_ids:
+            return True
+
+        # Try to serialize (per failure semantics)
+        try:
+            serialized = violation.to_json()
+        except (TypeError, ValueError, json.JSONEncodeError) as e:
+            # Serialization failure - CRITICAL
+            error_msg = f"VIOLATION SERIALIZATION FAILED: {e}"
+            self._emergency_log(error_msg)
+            self._trigger_safe_mode("serialization_failure", error_msg)
+            return False
+
+        # Write to file with retry logic
+        for attempt in range(self._max_retries):
+            try:
+                log_file = self.log_dir / f"violations_{time.strftime('%Y%m%d')}.jsonl"
+                with open(log_file, 'a') as f:
+                    f.write(serialized + '\n')
+                    f.flush()
+                    os.fsync(f.fileno())  # Ensure durability
+                
+                self._logged_ids.add(violation.violation_id)
+                self.validator.mark_violation_id_seen(violation.violation_id)
+                return True
+
+            except (IOError, OSError) as e:
+                if attempt < self._max_retries - 1:
+                    # Retry with exponential backoff
+                    time.sleep(self._retry_delays[attempt])
+                    continue
+                else:
+                    # All retries failed - CRITICAL
+                    error_msg = f"FAILED TO PERSIST VIOLATION AFTER {self._max_retries} ATTEMPTS: {e}"
+                    self._emergency_log(error_msg)
+                    self._trigger_safe_mode("persistence_failure", error_msg)
+                    return False
+
+        return False
+    
+    def _trigger_safe_mode(self, failure_type: str, error_msg: str):
+        """
+        Trigger safe mode per failure semantics.
+        
+        Per specification:
+        - System enters safe mode
+        - Dispatcher halts
+        - Audit entry forced
+        """
+        # Log to emergency file
+        self._emergency_log(f"SAFE MODE TRIGGERED: {failure_type} - {error_msg}")
+        
+        # In production, this would:
+        # 1. Signal kill switches to halt dispatcher
+        # 2. Force emergency audit entry
+        # 3. Alert operators
+        # For now, we just log the event
+        emergency_audit = {
+            "event_type": "safe_mode_triggered",
+            "failure_type": failure_type,
+            "error": error_msg,
+            "timestamp": time.time(),
+            "requires_immediate_attention": True
+        }
+        
+        try:
+            emergency_file = self.log_dir / "SAFE_MODE_ACTIVATED.jsonl"
+            with open(emergency_file, 'a') as f:
+                f.write(json.dumps(emergency_audit) + '\n')
+                f.flush()
+                os.fsync(f.fileno())
+        except Exception:
+            # If we can't even write emergency log, we're in deep trouble
+            pass
+
+    def _emergency_log(self, message: str):
+        """Emergency logging when normal logging fails"""
+        emergency_file = self.log_dir / "EMERGENCY.log"
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        with open(emergency_file, 'a') as f:
+            f.write(f"{timestamp} | {message}\n")
+
+    def query_violations(
+        self,
+        invariant: Optional[str] = None,
+        severity: Optional[ViolationSeverity] = None,
+        domain: Optional[ViolationDomain] = None,
+        since: Optional[float] = None
+    ) -> List[Dict[str, Any]]:
+        """Query logged violations with filters"""
+        violations = []
+        
+        for log_file in sorted(self.log_dir.glob("violations_*.jsonl")):
+            with open(log_file, 'r') as f:
+                for line in f:
+                    v = json.loads(line)
+                    
+                    # Apply filters
+                    if invariant and v.get("invariant") != invariant:
+                        continue
+                    if severity and v.get("severity") != severity.value:
+                        continue
+                    if domain and v.get("domain") != domain.value:
+                        continue
+                    if since and v.get("timestamp", 0) < since:
+                        continue
+                    
+                    violations.append(v)
+        
+        return violations
+
+
+# ============================================================================
+# EXAMPLE USAGE
+# ============================================================================
+
+if __name__ == "__main__":
+    # Initialize detector
+    detector = ViolationDetector(
+        component="posting_state_store",
+        file="posting_state_store.py"
+    )
+
+    # Example 1: Detect terminal state violation
+    violation1 = detector.detect_terminal_state_violation(
+        intent_id="intent_123",
+        current_state="POSTED",
+        attempted_state="QUEUED",
+        function="record_retry"
+    )
+
+    if violation1:
+        print("CRITICAL VIOLATION DETECTED:")
+        print(violation1.to_json())
+        print(f"\nRequires shutdown: {violation1.requires_shutdown()}")
+
+    # Example 2: Detect monotonic violation
+    violation2 = detector.detect_monotonic_violation(
+        intent_id="intent_456",
+        current_attempt=3,
+        new_attempt=2,
+        function="increment_attempt"
+    )
+
+    # Example 3: Manual violation creation
+    violation3 = (
+        ViolationBuilder("audit_log_complete")
+        .in_domain(ViolationDomain.GLOBAL)
+        .with_severity(ViolationSeverity.CRITICAL)
+        .detected_in("audit_logger", "audit_logger.py", "write_audit")
+        .with_context(
+            intent_id="intent_789",
+            missing_field="result_data"
+        )
+        .with_impact(
+            affected_intents=1,
+            data_corruption_risk=False,
+            external_exposure=False
+        )
+        .recommends(RecommendedAction.MANUAL_REVIEW)
+        .with_metadata(
+            environment="production",
+            build_id="v1.2.3"
+        )
+        .build()
+    )
+
+    # Log violations
+    logger = ViolationLogger(Path("./violation_logs"))
+    
+    for v in [violation1, violation2, violation3]:
+        if v:
+            success = logger.log_violation(v)
+            print(f"Logged {v.violation_id}: {success}")
+
+    # Query violations
+    critical_violations = logger.query_violations(
+        severity=ViolationSeverity.CRITICAL,
+        since=time.time() - 3600
+    )
+    
+    print(f"\nFound {len(critical_violations)} critical violations in last hour")

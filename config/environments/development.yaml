@@ -1,0 +1,97 @@
+# Development Environment Configuration
+# This file defines all environment-specific settings for local development
+
+environment: DEVELOPMENT
+
+# Governance & Safety
+governance:
+  lock_mode: "permissive"  # Allow structural mutations without strict locks
+  validation_strictness: "relaxed"  # Allow warnings instead of hard failures
+  safety_watchdog:
+    enabled: true
+    strict_mode: false
+    allow_bypass: true
+
+# Validation Rules
+validation:
+  strict_invariants: false
+  allow_partial_repair: true
+  allow_auto_repair: true
+  require_operator_authorization: false
+  fail_fast_on_corruption: false
+
+# Limits & Rate Limiting
+limits:
+  max_concurrent_jobs: 5
+  rate_limit_enabled: false
+  abuse_detection_enabled: false
+  geo_restrictions_enabled: false
+  max_events_per_batch: 100
+
+# Feature Flags
+feature_flags:
+  enable_experiments: true
+  allow_unregistered_variants: true
+  require_variant_registration: false
+  enable_debug_endpoints: true
+
+# Observability
+observability:
+  strict_required: false
+  allow_monitoring_bypass: true
+  require_health_checks: false
+  metrics_collection_interval: 30  # seconds
+  detailed_debug_logs: true
+
+# Logging
+logging:
+  level: "DEBUG"
+  structured_logging: false
+  enforce_audit_hash: false
+  enforce_pii_redaction: false
+  audit_log_path: "./logs/audit_dev.log"
+
+# Persistence
+persistence:
+  enforce_immutability: false
+  allow_truncate_operations: true
+  enforce_persistence_hash: false
+  allow_schema_downgrade: true
+
+# External Integrations
+integrations:
+  require_webhook_signatures: false
+  allow_sandbox_apis: true
+  enforce_tls_verification: false
+  allow_mock_providers: true
+
+# Lineage & Replay
+lineage:
+  replay_enabled: true
+  audit_strict: false
+  merkle_validation: false
+
+# ML & Training
+ml:
+  training_enabled: true
+  model_cache_enabled: true
+  allow_model_downgrade: true
+
+# Ingestion
+ingestion:
+  max_concurrent_downloads: 3
+  freshness_threshold_hours: 24
+  retry_attempts: 3
+  timeout_seconds: 30
+
+# Generation
+generation:
+  max_concurrent_generations: 2
+  timeout_seconds: 300
+  enable_preview_mode: true
+
+# Posting
+posting:
+  dry_run_enabled: true
+  max_posts_per_hour: 5
+  require_approval: false

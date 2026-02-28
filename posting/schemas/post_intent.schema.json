@@ -1,0 +1,421 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://posting-system.internal/schemas/post_intent.schema.json",
+    "title": "Immutable Posting Intent Contract (System Root Schema)",
+    "description": "TIER-0 SYSTEM ROOT CONTRACT - MAXIMUM AUTHORITY LEVEL\n\npost_intent.schema.json is the single canonical definition of:\n'What does it mean to intend to post something?'\n\nEvery system component relies on this being:\n- complete (no missing fields)\n- deterministic (same input = same output)\n- immutable (never edited after creation)\n- forward-compatible (versioned evolution only)\n\nThis is not a validation convenience.\nThis is a legal, operational, and replay contract.\n\nABSOLUTE AUTHORITY BOUNDARY:\n  intent_builder.py\n        ↓\n  post_intent.schema.json   ← YOU ARE HERE (ROOT CONTRACT)\n        ↓\n  posting_queue.py\n  post_dispatcher.py\n  posting_state_store.py\n  monitoring/*\n  learning/*\n\nNothing downstream is allowed to add meaning.\n\nCORE RESPONSIBILITY (LOCK THIS):\nDefine the complete, immutable, replayable declaration of a posting action.\n\nOnce created:\n- it is never edited\n- never patched\n- never 'fixed'\n- Corrections require a new intent.\n\nDESIGN PRINCIPLES (NON-NEGOTIABLE):\n- Immutability first\n- Explicit over inferred\n- Platform-agnostic\n- Forward-versioned\n- Replay-safe\n\nSCHEMA VERSIONING (MANDATORY):\nEvery intent MUST include 'schema_version': '1.0.0'\nRules: backward compatible only, no silent upgrades, consumers must declare supported versions.",
+    
+    "type": "object",
+    "required": [
+      "schema_version",
+      "intent_id",
+      "created_at",
+      "created_by",
+      "content",
+      "targets",
+      "constraints",
+      "visibility"
+    ],
+    "additionalProperties": false,
+    
+    "properties": {
+      "schema_version": {
+        "type": "string",
+        "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+        "const": "1.0.0",
+        "description": "MANDATORY: Schema version. Rules: backward compatible only, no silent upgrades, consumers must declare supported versions. Every intent MUST include this field."
+      },
+      
+      "intent_id": {
+        "$ref": "#/$defs/uuid",
+        "description": "REQUIRED: Globally unique identifier. UUIDv7 preferred. Never reused. Used as the primary join key across the system. CRITICAL: Immutable identity for replay and audit correlation."
+      },
+      
+      "created_at": {
+        "$ref": "#/$defs/timestamp",
+        "description": "REQUIRED: Unix timestamp (float) of intent creation moment. Never updated. Used for: replay ordering, audit correlation, SLA analysis. Creation moment only - no modifications allowed."
+      },
+      
+      "created_by": {
+        "type": "string",
+        "enum": ["system", "human", "api"],
+        "description": "REQUIRED: Origin of intent creation. Enumerated values only. Used for: compliance, blame isolation, privilege audits. Determines accountability chain."
+      },
+      
+      "content": {
+        "type": "object",
+        "required": [
+          "content_id",
+          "content_type",
+          "checksum"
+        ],
+        "additionalProperties": false,
+        "description": "REQUIRED: Immutable content payload. All content must be addressable via URI, no inline binaries allowed. Checksum required for content integrity verification and replay safety.",
+        "properties": {
+          "content_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "REQUIRED: Unique identifier for this content piece. Must be stable and addressable. Used for content deduplication and retrieval."
+          },
+          "content_type": {
+            "$ref": "#/$defs/content_type",
+            "description": "REQUIRED: Primary content type classification. Determines platform-specific handling and validation rules."
+          },
+          "checksum": {
+            "$ref": "#/$defs/sha256",
+            "description": "REQUIRED: SHA-256 checksum of primary content. Required for content integrity verification and replay safety. Lowercase hexadecimal format only."
+          },
+          "duration_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 86400,
+            "description": "OPTIONAL: Duration in seconds for video/audio content. Optional for static content. Maximum 24 hours (86400 seconds)."
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-z]{2}(-[A-Z]{2})?$",
+            "description": "OPTIONAL: ISO 639-1 language code (e.g., 'en', 'es', 'en-US'). Used for platform-specific language routing and content filtering."
+          },
+          "caption": {
+            "type": "string",
+            "maxLength": 10000,
+            "description": "OPTIONAL: Text caption/description accompanying the content. Platform-specific formatting applied at posting time. Maximum 10,000 characters."
+          },
+          "hashtags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_]+$",
+              "maxLength": 100
+            },
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "OPTIONAL: List of hashtags (without # prefix). Platform formatting applied at posting time. Maximum 100 unique hashtags, alphanumeric and underscore only."
+          },
+          "assets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "OPTIONAL: Ordered list of content assets. Must be addressable via URI. Required for carousel content types. Maximum 50 assets.",
+            "items": {
+              "type": "object",
+              "required": ["asset_id", "uri", "checksum"],
+              "additionalProperties": false,
+              "properties": {
+                "asset_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255,
+                  "description": "REQUIRED: Unique identifier for this asset. Must be stable and addressable."
+                },
+                "uri": {
+                  "type": "string",
+                  "format": "uri",
+                  "description": "REQUIRED: Addressable URI for asset retrieval. Must be accessible by posting system. No inline binaries allowed."
+                },
+                "checksum": {
+                  "$ref": "#/$defs/sha256",
+                  "description": "REQUIRED: SHA-256 checksum of asset content. Lowercase hexadecimal format only. Used for integrity verification."
+                },
+                "mime_type": {
+                  "type": "string",
+                  "pattern": "^[a-z]+/[a-z0-9+.-]+$",
+                  "description": "OPTIONAL: MIME type of the asset (e.g., 'video/mp4', 'image/jpeg'). Used for platform-specific validation."
+                },
+                "size_bytes": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "OPTIONAL: Asset size in bytes. Used for platform size limit validation and transfer planning."
+                }
+              }
+            }
+          }
+        }
+      },
+      
+      "targets": {
+        "type": "object",
+        "required": ["platforms"],
+        "additionalProperties": false,
+        "description": "REQUIRED: Declarative targeting specification. Defines WHERE to post, not HOW. No account IDs - routing happens downstream. Platform-agnostic targeting only.",
+        "properties": {
+          "platforms": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "uniqueItems": true,
+        "items": {
+          "$ref": "#/$defs/platform"
+        },
+            "description": "REQUIRED: Target platforms for posting. Dispatcher selects specific accounts. Minimum 1, maximum 20 unique platforms."
+          },
+          "account_groups": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9_-]+$",
+              "maxLength": 100
+            },
+            "maxItems": 20,
+            "uniqueItems": true,
+            "description": "OPTIONAL: Logical account groups (e.g., 'primary', 'backup', 'test'). Resolved by account registry. Lowercase alphanumeric, underscore, and hyphen only."
+          },
+          "max_accounts": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "OPTIONAL: Maximum number of accounts to post to per platform. Hard limit for blast radius control. Minimum 1, maximum 1000."
+          },
+          "geo_constraints": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$"
+            },
+            "maxItems": 250,
+            "uniqueItems": true,
+            "description": "OPTIONAL: ISO 3166-1 alpha-2 country codes. Accounts outside these regions excluded from routing. Maximum 250 unique country codes."
+          }
+        }
+      },
+      
+      "constraints": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "REQUIRED: Hard boundaries for posting execution. Non-negotiable limits. If violated, intent expires rather than retries. These are explicit, not inferred.",
+        "properties": {
+          "earliest_post_time": {
+            "type": "number",
+            "minimum": 0,
+            "description": "OPTIONAL: Unix timestamp (float). Do not post before this time. Used for scheduled posting. Must be less than latest_post_time if both are specified. Cross-field validation enforced at application layer."
+          },
+          "latest_post_time": {
+            "type": "number",
+            "minimum": 0,
+            "description": "OPTIONAL: Unix timestamp (float). Do not post after this time. Intent expires if not posted by deadline. Must be greater than earliest_post_time if both are specified. Cross-field validation enforced at application layer."
+          },
+          "max_attempts": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "OPTIONAL: Maximum number of posting attempts per account. After this, mark as failed. Explicit value required - no defaults allowed. Minimum 1, maximum 100."
+          },
+          "expiry_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 31536000,
+            "description": "OPTIONAL: Time-to-live in seconds from created_at. Intent expires and cannot be executed after this. Maximum 1 year (31536000 seconds)."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "earliest_post_time": {"type": "number"},
+                "latest_post_time": {"type": "number"}
+              },
+              "required": ["earliest_post_time", "latest_post_time"]
+            },
+            "then": {
+              "description": "When both earliest_post_time and latest_post_time are present, earliest must be less than latest. This is enforced by application-layer validation."
+            }
+          }
+        ]
+      },
+      
+      "visibility": {
+        "type": "object",
+        "required": ["default"],
+        "additionalProperties": false,
+        "description": "REQUIRED: Declarative visibility specification. Logic may choose whether to post, but cannot change what visibility means. Platform-agnostic declaration only.",
+        "properties": {
+          "default": {
+            "$ref": "#/$defs/visibility_level",
+            "description": "REQUIRED: Default visibility setting for all platforms unless overridden. Explicit value required - no defaults allowed."
+          },
+          "allow_overrides": {
+            "type": "boolean",
+            "description": "OPTIONAL: Whether platform-specific overrides are permitted. Explicit value required - no defaults allowed. If false, platform_overrides are ignored."
+          },
+          "platform_overrides": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "OPTIONAL: Platform-specific visibility overrides. Only applied if allow_overrides is true. Keys must be valid platform names from targets.platforms.",
+            "patternProperties": {
+              "^(youtube|tiktok|instagram|facebook|twitter|linkedin|snapchat|pinterest|reddit|twitch)$": {
+                "$ref": "#/$defs/visibility_level"
+              }
+            }
+          }
+        }
+      },
+      
+      "risk_declaration": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "OPTIONAL: Risk classification and review requirements. Feeds risk_evaluator.py, rollout gating, and audit attribution. Lying here is detectable and actionable. All fields optional but recommended for compliance.",
+        "properties": {
+          "content_class": {
+            "$ref": "#/$defs/content_class",
+            "description": "OPTIONAL: Classification of content origin and type. Used for risk assessment and platform policy enforcement. Explicit values: original (first-party content), repost (reposted content), trend (trending/viral content)."
+          },
+          "expected_risk": {
+            "$ref": "#/$defs/risk_level",
+            "description": "OPTIONAL: Declared risk level. Validated against actual risk score post-execution. Used for gating and review requirements. Explicit values: low (minimal risk), medium (moderate risk), high (significant risk)."
+          },
+          "requires_human_review": {
+            "type": "boolean",
+            "description": "OPTIONAL: Whether human review is required before posting. Explicit value required - no defaults allowed. If true, posting is blocked until human approval."
+          }
+        }
+      },
+      
+      "metadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "OPTIONAL: Strictly non-operational metadata. Ignored by execution, routing, and retry logic. Pure annotation only. No operational meaning. Used for analytics, debugging, and human-readable context.",
+        "properties": {
+          "campaign_id": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "OPTIONAL: Campaign identifier for analytics grouping. Non-operational annotation only."
+          },
+          "experiment_id": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "OPTIONAL: Experiment/A-B test identifier. Non-operational annotation only."
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 10000,
+            "description": "OPTIONAL: Human-readable notes about this intent. Non-operational annotation only. Maximum 10,000 characters."
+          }
+        }
+      }
+    },
+    
+    "$defs": {
+      "timestamp": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Unix timestamp (seconds since epoch, may include fractional seconds). Used for temporal ordering and scheduling."
+      },
+      "uuid": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        "description": "UUID v4 or v7 format. Globally unique identifier. Never reused. Used as primary join key across system."
+      },
+      "sha256": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$",
+        "description": "SHA-256 hash in lowercase hexadecimal format. Used for content integrity verification and replay safety."
+      },
+      "platform": {
+        "type": "string",
+        "enum": [
+          "youtube",
+          "tiktok",
+          "instagram",
+          "facebook",
+          "twitter",
+          "linkedin",
+          "snapchat",
+          "pinterest",
+          "reddit",
+          "twitch"
+        ],
+        "description": "Supported posting platforms. Platform-agnostic enumeration. Used in targets.platforms array."
+      },
+      "visibility_level": {
+        "type": "string",
+        "enum": ["public", "unlisted", "private", "followers_only"],
+        "description": "Content visibility options. Platform-agnostic declaration. Used in visibility.default and visibility.platform_overrides."
+      },
+      "risk_level": {
+        "type": "string",
+        "enum": ["low", "medium", "high"],
+        "description": "Risk classification levels. Used for gating and review requirements. Feeds risk_evaluator.py and rollout_controller.py."
+      },
+      "content_class": {
+        "type": "string",
+        "enum": ["original", "repost", "trend"],
+        "description": "Content origin classification. Used for risk assessment and platform policy enforcement. Explicit values: original (first-party), repost (reposted), trend (trending/viral)."
+      },
+      "content_type": {
+        "type": "string",
+        "enum": ["video", "image", "text", "carousel"],
+        "description": "Primary content type classification. Determines platform-specific handling and validation rules."
+      }
+    },
+    
+    "$comment": "TIER-0 SYSTEM ROOT CONTRACT - DO NOT MODIFY WITHOUT AUTHORIZATION\n\nThis file is written at the same authority level as posting_state_store.py.\nIf post_intent.schema.json is weak, everything downstream becomes probabilistic,\nno matter how good your logic is.\n\nWHY THIS FILE IS SYSTEM-CRITICAL:\n- Retries depend on intent purity\n- Audits depend on replay\n- Learning depends on truth\n- Platforms punish ambiguity\n\nThis file ensures: Intent is a fact, not a suggestion.",
+    "x-system-critical": true,
+    "x-immutable": true,
+    "x-replay-safe": true,
+    "x-platform-agnostic": true,
+    "x-compliance-ready": true,
+    "x-tier": 0,
+    "x-authority-level": "maximum",
+    "x-forbidden-patterns": [
+      "platform credentials",
+      "retry state",
+      "execution hints",
+      "dynamic routing flags",
+      "mutable counters",
+      "rollout parameters",
+      "account IDs in targets",
+      "default values",
+      "inferred fields",
+      "runtime enrichment",
+      "platform-specific payloads",
+      "session data",
+      "cookies",
+      "tokens",
+      "api keys",
+      "telemetry data",
+      "heuristics",
+      "suppression logic"
+    ],
+    "x-interaction-matrix": {
+      "intent_builder.py": "creates - builds intent from user/system input",
+      "posting_queue.py": "reads - enqueues intent for processing",
+      "post_dispatcher.py": "reads - routes intent to platform handlers",
+      "posting_state_store.py": "references - stores state linked to intent_id",
+      "audit_logger.py": "logs - records intent for compliance",
+      "monitoring/*": "read-only - observes intent for metrics",
+      "learning/*": "read-only - analyzes intent for ML models",
+      "risk_evaluator.py": "reads - evaluates risk_declaration",
+      "rollout_controller.py": "reads - gates rollout based on risk",
+      "reconciliation.py": "references - reconciles state using intent_id"
+    },
+    "x-invariants": [
+      "intent identity is immutable (intent_id never changes)",
+      "content is checksum-locked (integrity verified)",
+      "targets are declarative only (no account IDs)",
+      "constraints are explicit (no defaults)",
+      "execution cannot smuggle state upstream",
+      "no defaults allowed (explicit values required)",
+      "no inferred values (all fields explicit)",
+      "replay-safe by design (deterministic replay)",
+      "platform-agnostic (no platform-specific fields)",
+      "forward-compatible (versioned evolution only)"
+    ],
+    "x-validation-rules": [
+      "earliest_post_time < latest_post_time (if both present)",
+      "created_at <= earliest_post_time (if earliest_post_time present)",
+      "created_at + expiry_seconds >= latest_post_time (if both present)",
+      "intent_id is globally unique",
+      "content.checksum matches actual content",
+      "assets[].checksum matches actual asset content",
+      "targets.platforms contains valid platform names",
+      "visibility.default is valid visibility level",
+      "risk_declaration.expected_risk matches actual risk (post-execution validation)"
+    ],
+    "x-loc-estimate": {
+      "json_schema": "300-500",
+      "definitions_enums": "200-300",
+      "comments_docs": "150-250",
+      "total": "~700-1000",
+      "note": "Correct for Tier-0 system-critical contract"
+    }
+  }

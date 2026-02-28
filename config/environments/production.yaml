@@ -1,0 +1,97 @@
+# Production Environment Configuration
+# Live production environment with strictest constraints
+
+environment: PRODUCTION
+
+# Governance & Safety
+governance:
+  lock_mode: "strict"  # Require explicit locks for all structural mutations
+  validation_strictness: "strict"  # Hard fail on all violations
+  safety_watchdog:
+    enabled: true
+    strict_mode: true
+    allow_bypass: false
+
+# Validation Rules
+validation:
+  strict_invariants: true
+  allow_partial_repair: false
+  allow_auto_repair: false
+  require_operator_authorization: true
+  fail_fast_on_corruption: true
+
+# Limits & Rate Limiting
+limits:
+  max_concurrent_jobs: 50
+  rate_limit_enabled: true
+  abuse_detection_enabled: true
+  geo_restrictions_enabled: true
+  max_events_per_batch: 1000
+
+# Feature Flags
+feature_flags:
+  enable_experiments: true
+  allow_unregistered_variants: false
+  require_variant_registration: true
+  enable_debug_endpoints: false
+
+# Observability
+observability:
+  strict_required: true  # Monitoring MUST be operational
+  allow_monitoring_bypass: false
+  require_health_checks: true
+  metrics_collection_interval: 10  # seconds
+  detailed_debug_logs: false
+
+# Logging
+logging:
+  level: "INFO"
+  structured_logging: true
+  enforce_audit_hash: true
+  enforce_pii_redaction: true
+  audit_log_path: "/var/log/viral-system/audit_prod.log"
+
+# Persistence
+persistence:
+  enforce_immutability: true
+  allow_truncate_operations: false
+  enforce_persistence_hash: true
+  allow_schema_downgrade: false
+
+# External Integrations
+integrations:
+  require_webhook_signatures: true
+  allow_sandbox_apis: false
+  enforce_tls_verification: true
+  allow_mock_providers: false
+
+# Lineage & Replay
+lineage:
+  replay_enabled: false  # Disabled in production
+  audit_strict: true
+  merkle_validation: true
+
+# ML & Training
+ml:
+  training_enabled: false  # Training runs separately
+  model_cache_enabled: true
+  allow_model_downgrade: false
+
+# Ingestion
+ingestion:
+  max_concurrent_downloads: 20
+  freshness_threshold_hours: 6
+  retry_attempts: 5
+  timeout_seconds: 120
+
+# Generation
+generation:
+  max_concurrent_generations: 10
+  timeout_seconds: 900
+  enable_preview_mode: false
+
+# Posting
+posting:
+  dry_run_enabled: false
+  max_posts_per_hour: 50
+  require_approval: true  # Require approval in production

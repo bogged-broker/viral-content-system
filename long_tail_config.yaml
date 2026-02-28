@@ -1,0 +1,67 @@
+# Long Tail Tracker Configuration
+# Config-driven baseline targets and thresholds
+
+baseline_targets:
+  default: 5_000_000
+  high_performance: 10_000_000
+  niche_specific:
+    gaming: 8_000_000
+    tech: 6_000_000
+    entertainment: 12_000_000
+    education: 3_000_000
+    lifestyle: 4_000_000
+
+# Intervention thresholds
+intervention_thresholds:
+  evergreen: 0.75
+  slow_burn: 0.60
+  underperform: 0.40
+
+# Platform weights
+platform_weights:
+  youtube:
+    retention: 0.4
+    watch_time: 0.3
+    engagement: 0.3
+  tiktok:
+    completion: 0.4
+    shares: 0.3
+    engagement: 0.3
+  instagram:
+    completion: 0.35
+    saves: 0.35
+    engagement: 0.3
+
+# Trend integration settings
+trend_integration:
+  enabled: true
+  weight_in_scoring: 0.3
+  cache_duration_hours: 1
+  velocity_threshold: 1000
+
+# RL reward shaping
+reward_shaping:
+  enabled: true
+  base_reward_scale: 2.0
+  improvement_bonus_scale: 5.0
+  confidence_penalty_scale: 0.5
+
+# Experiment management
+experiments:
+  enabled: true
+  auto_create: true
+  sample_rate: 0.1  # 10% of videos get experiments
+
+# Dashboard API
+dashboard_api:
+  enabled: true
+  base_url: "https://api.dashboard.example.com"
+  timeout_seconds: 30
+  fallback_to_file: true
+
+# Geo-timing optimization
+geo_timing:
+  enabled: true
+  min_audience_size: 100_000
+  peak_hour_threshold: 0.6
+  regional_weight: 0.7

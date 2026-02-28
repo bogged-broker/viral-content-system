@@ -1,0 +1,79 @@
+# Google-level Platform-Specific Configuration
+# Managed by ConfigurationManager - reloads every 5 minutes
+
+tiktok:
+  preferred_sample_rate: 44100
+  max_retries: 3
+  backoff_base: 2.0
+  timeout_seconds: 300
+  quality_preset: balanced
+  memory_limit_mb: 1024
+  cpu_limit_cores: 1.0
+  enabled_codecs:
+    - aac
+    - mp3
+    - wav
+  storage_class: standard
+  platform_specific:
+    vertical_video_ratio: 9.0 / 16.0
+    trending_score_threshold: 0.7
+    region_code: US
+    language_code: en
+
+youtube_shorts:
+  preferred_sample_rate: 48000
+  max_retries: 3
+  backoff_base: 2.0
+  timeout_seconds: 300
+  quality_preset: balanced
+  memory_limit_mb: 1024
+  cpu_limit_cores: 1.0
+  enabled_codecs:
+    - aac
+    - mp3
+    - wav
+  storage_class: standard
+  platform_specific:
+    video_id_youtube: ""
+    channel_id: ""
+    category_id: "22"  # People & Blogs
+    definition: hd
+    caption_available: true
+    age_restricted: false
+
+instagram_reels:
+  preferred_sample_rate: 44100
+  max_retries: 3
+  backoff_base: 2.0
+  timeout_seconds: 300
+  quality_preset: balanced
+  memory_limit_mb: 1024
+  cpu_limit_cores: 1.0
+  enabled_codecs:
+    - aac
+    - mp3
+    - wav
+  storage_class: standard
+  platform_specific:
+    media_id: ""
+    owner_id: ""
+    is_comment_enabled: true
+    location_tag: ""
+    sponsored_content: false
+    branded_content: false
+    filter_used: ""
+    ar_effects: []
+
+# Global settings
+global:
+  default_sample_rate: 44100
+  default_max_retries: 3
+  default_timeout_seconds: 300
+  default_quality_preset: balanced
+  default_memory_limit_mb: 1024
+  default_cpu_limit_cores: 1.0
+  default_enabled_codecs:
+    - aac
+    - mp3
+    - wav
+  default_storage_class: standard

@@ -1,0 +1,419 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://posting.system/schemas/account_state.schema.json",
+    "title": "Authoritative Account State Contract (Posting Eligibility & Risk Truth)",
+    "description": "Canonical, authoritative snapshot of an account's operational state as it relates to posting. Defines whether an account may post, under what constraints, and why. Single source of truth consumed by account routing, rollout control, risk evaluation, suppression monitoring, and fallback policy. Current asserted truth, not inference.",
+    "type": "object",
+    "required": [
+      "schema_version",
+      "account_state_id",
+      "account_id",
+      "platform",
+      "state",
+      "eligibility",
+      "suppression_level",
+      "recorded_at"
+    ],
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "type": "string",
+        "const": "1.0.0",
+        "description": "Schema version - backward compatible only. Consumers must declare support."
+      },
+      "account_state_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "description": "UUIDv7 preferred (version 7 in position 14) - unique per state transition, primary key"
+      },
+      "account_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "description": "Opaque identifier - platform-scoped, immutable"
+      },
+      "platform": {
+        "type": "string",
+        "enum": [
+          "youtube",
+          "tiktok",
+          "instagram",
+          "twitter",
+          "facebook",
+          "linkedin",
+          "reddit",
+          "bluesky"
+        ],
+        "description": "Normalized platform identifier - immutable per account"
+      },
+      "state": {
+        "type": "string",
+        "enum": [
+          "HEALTHY",
+          "WARMING",
+          "LIMITED",
+          "COOLDOWN",
+          "QUARANTINED",
+          "BANNED"
+        ],
+        "description": "Authoritative account state - finite enum, no composite states allowed"
+      },
+      "previous_state": {
+        "type": "string",
+        "enum": [
+          "HEALTHY",
+          "WARMING",
+          "LIMITED",
+          "COOLDOWN",
+          "QUARANTINED",
+          "BANNED"
+        ],
+        "description": "Required for all except initial creation - must be valid predecessor. Enforced by account_state_store.py using state_transitions matrix."
+      },
+      "eligibility": {
+        "type": "string",
+        "enum": [
+          "FULL",
+          "RESTRICTED",
+          "NONE"
+        ],
+        "description": "Explicit routing permission - routing logic MUST obey this field. No implicit eligibility."
+      },
+      "suppression_level": {
+        "type": "string",
+        "enum": [
+          "NONE",
+          "LOW",
+          "MEDIUM",
+          "HIGH",
+          "UNKNOWN"
+        ],
+        "description": "Normalized visibility posture - asserted truth, not speculation. Required field."
+      },
+      "cooldown_until": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Unix timestamp (float) - required if state=COOLDOWN, forbidden otherwise. Must be > recorded_at (enforced by account_state_store.py)."
+      },
+      "risk_score": {
+        "type": "number",
+        "minimum": 0.0,
+        "maximum": 1.0,
+        "description": "Last evaluated suppression/enforcement risk - float ∈ [0.0, 1.0]. Opaque to consumers. Used for ordering, not decisions."
+      },
+      "recorded_at": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Monotonic timestamp - write-time truth, audit anchor. Must be monotonic across state transitions."
+      },
+      "terminal": {
+        "type": "boolean",
+        "default": false,
+        "description": "True only for BANNED - forbids further transitions. Any write after terminal is a bug."
+      },
+      "reason": {
+        "type": "object",
+        "description": "MANDATORY for non-HEALTHY states - why the state exists. This is why the state exists.",
+        "required": [
+          "trigger",
+          "source",
+          "confidence"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "trigger": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "What triggered this state change - no freeform blobs"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "telemetry",
+              "platform_response",
+              "manual",
+              "anomaly_detector"
+            ],
+            "description": "Origin of the state change decision"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0,
+            "description": "Confidence level of the state change reason - confidence ∈ [0.0, 1.0]"
+          }
+        }
+      },
+      "metadata": {
+        "type": "object",
+        "description": "Annotation only - ignored by logic, allowed for audits and debugging",
+        "additionalProperties": false,
+        "properties": {
+          "evaluator_version": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "Version of the evaluator that produced this state"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2048,
+            "description": "Human-readable notes for debugging"
+          },
+          "operator_id": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "ID of operator who manually triggered state change"
+          }
+        }
+      }
+    },
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "state": {
+              "const": "COOLDOWN"
+            }
+          },
+          "required": ["state"]
+        },
+        "then": {
+          "required": ["cooldown_until"],
+          "properties": {
+            "cooldown_until": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "cooldown_until": false
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "state": {
+              "not": {
+                "const": "HEALTHY"
+              }
+            }
+          },
+          "required": ["state"]
+        },
+        "then": {
+          "required": ["reason"]
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "state": {
+              "const": "BANNED"
+            }
+          },
+          "required": ["state"]
+        },
+        "then": {
+          "required": ["terminal"],
+          "properties": {
+            "terminal": {
+              "const": true
+            }
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "terminal": {
+              "const": true
+            }
+          },
+          "required": ["terminal"]
+        },
+        "then": {
+          "required": ["state"],
+          "properties": {
+            "state": {
+              "const": "BANNED"
+            }
+          }
+        }
+      }
+    ],
+    "$defs": {
+      "state_transitions": {
+        "description": "Valid state transition matrix - enforced by account_state_store.py. Prevents silent escalations. No mutations outside the store.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "HEALTHY": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["WARMING", "LIMITED", "COOLDOWN", "QUARANTINED"]
+            },
+            "uniqueItems": true
+          },
+          "WARMING": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["HEALTHY", "LIMITED", "COOLDOWN", "QUARANTINED"]
+            },
+            "uniqueItems": true
+          },
+          "LIMITED": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["HEALTHY", "WARMING", "COOLDOWN", "QUARANTINED"]
+            },
+            "uniqueItems": true
+          },
+          "COOLDOWN": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["HEALTHY", "WARMING", "LIMITED", "QUARANTINED"]
+            },
+            "uniqueItems": true
+          },
+          "QUARANTINED": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["HEALTHY", "COOLDOWN", "BANNED"]
+            },
+            "uniqueItems": true
+          },
+          "BANNED": {
+            "type": "array",
+            "items": false,
+            "maxItems": 0,
+            "description": "Terminal state - no transitions allowed. Absorbing state."
+          }
+        }
+      },
+      "eligibility_mapping": {
+        "description": "State to eligibility mapping guidelines - routing logic MUST obey this field. Deterministic routing.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "HEALTHY": {
+            "const": "FULL"
+          },
+          "WARMING": {
+            "const": "FULL"
+          },
+          "LIMITED": {
+            "const": "RESTRICTED"
+          },
+          "COOLDOWN": {
+            "const": "NONE"
+          },
+          "QUARANTINED": {
+            "const": "NONE"
+          },
+          "BANNED": {
+            "const": "NONE"
+          }
+        }
+      },
+      "forbidden_content": {
+        "description": "Content that MUST NOT appear in this schema - HARD FAIL if present. Those belong elsewhere.",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "credentials",
+            "cookies",
+            "raw_platform_payloads",
+            "per_post_data",
+            "retry_counters",
+            "ml_features"
+          ]
+        },
+        "uniqueItems": true
+      },
+      "authority_boundary": {
+        "description": "Who may write vs read this schema - enforced by account_state_store.py. Only the account state store may write this schema. Everyone else reads.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "write": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "const": "account_state_store.py"
+            },
+            "minItems": 1,
+            "maxItems": 1,
+            "uniqueItems": true,
+            "description": "Only account_state_store.py may write"
+          },
+          "read": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "account_router.py",
+                "rollout_controller.py",
+                "risk_evaluator.py",
+                "suppression_monitor.py",
+                "audit_logger.py"
+              ]
+            },
+            "uniqueItems": true,
+            "description": "All other components read only"
+          }
+        },
+        "required": ["write", "read"]
+      },
+      "invariants": {
+        "description": "Invariants guaranteed by this schema - no more 'why did this account post?'",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "account_eligibility_is_explicit",
+            "cooldowns_cannot_be_implicit",
+            "suppression_is_observable",
+            "bans_are_terminal",
+            "routing_is_deterministic"
+          ]
+        },
+        "uniqueItems": true
+      },
+      "interaction_matrix": {
+        "description": "Component access matrix - no mutations outside the store",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "account_state_store.py": {
+            "const": "write"
+          },
+          "account_router.py": {
+            "const": "read"
+          },
+          "rollout_controller.py": {
+            "const": "read"
+          },
+          "risk_evaluator.py": {
+            "const": "read"
+          },
+          "suppression_monitor.py": {
+            "const": "read"
+          },
+          "audit_logger.py": {
+            "const": "read"
+          }
+        }
+      }
+    }
+  }

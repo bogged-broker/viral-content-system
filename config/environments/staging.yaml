@@ -1,0 +1,97 @@
+# Staging Environment Configuration
+# Pre-production environment with relaxed constraints for testing
+
+environment: STAGING
+
+# Governance & Safety
+governance:
+  lock_mode: "moderate"  # Require locks for structural mutations
+  validation_strictness: "moderate"  # Allow soft failures with warnings
+  safety_watchdog:
+    enabled: true
+    strict_mode: true
+    allow_bypass: false
+
+# Validation Rules
+validation:
+  strict_invariants: true
+  allow_partial_repair: true
+  allow_auto_repair: true
+  require_operator_authorization: false
+  fail_fast_on_corruption: true
+
+# Limits & Rate Limiting
+limits:
+  max_concurrent_jobs: 10
+  rate_limit_enabled: false  # Disabled for load testing
+  abuse_detection_enabled: false
+  geo_restrictions_enabled: false
+  max_events_per_batch: 500
+
+# Feature Flags
+feature_flags:
+  enable_experiments: true
+  allow_unregistered_variants: true
+  require_variant_registration: false
+  enable_debug_endpoints: true
+
+# Observability
+observability:
+  strict_required: false  # Can bypass for testing
+  allow_monitoring_bypass: true
+  require_health_checks: true
+  metrics_collection_interval: 15  # seconds
+  detailed_debug_logs: true
+
+# Logging
+logging:
+  level: "INFO"
+  structured_logging: true
+  enforce_audit_hash: false
+  enforce_pii_redaction: false
+  audit_log_path: "./logs/audit_staging.log"
+
+# Persistence
+persistence:
+  enforce_immutability: true
+  allow_truncate_operations: true
+  enforce_persistence_hash: true
+  allow_schema_downgrade: false
+
+# External Integrations
+integrations:
+  require_webhook_signatures: false
+  allow_sandbox_apis: true
+  enforce_tls_verification: false
+  allow_mock_providers: true
+
+# Lineage & Replay
+lineage:
+  replay_enabled: true
+  audit_strict: true
+  merkle_validation: true
+
+# ML & Training
+ml:
+  training_enabled: true
+  model_cache_enabled: true
+  allow_model_downgrade: false
+
+# Ingestion
+ingestion:
+  max_concurrent_downloads: 10
+  freshness_threshold_hours: 12
+  retry_attempts: 5
+  timeout_seconds: 60
+
+# Generation
+generation:
+  max_concurrent_generations: 5
+  timeout_seconds: 600
+  enable_preview_mode: false
+
+# Posting
+posting:
+  dry_run_enabled: false
+  max_posts_per_hour: 20
+  require_approval: false

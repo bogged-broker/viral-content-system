@@ -1,0 +1,575 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://posting.system/contracts/state_transition.schema.json",
+    "title": "Authoritative Posting State Transition Contract",
+    "description": "Canonical definition of all allowed state transitions across the posting system. This file defines law, not behavior. If a transition is not defined here, it must never happen. No flexibility. No 'best effort.' No hidden transitions. Binds intent → execution → account → platform into a single, auditable truth graph.",
+    "schema_version": "1.0.0",
+    "domains": {
+      "intent": {
+        "description": "Authoritative lifecycle of PostIntent. Intent never 'succeeds' or 'fails' - only posting does.",
+        "states": [
+          "CREATED",
+          "QUEUED",
+          "CLAIMED",
+          "CANCELLED"
+        ],
+        "transitions": [
+          {
+            "from": "CREATED",
+            "to": "QUEUED",
+            "conditions": ["intent_valid"],
+            "description": "Intent validated and ready for worker assignment"
+          },
+          {
+            "from": "QUEUED",
+            "to": "CLAIMED",
+            "conditions": ["worker_available"],
+            "description": "Worker claimed the intent for execution"
+          },
+          {
+            "from": "CREATED",
+            "to": "CANCELLED",
+            "conditions": ["manual_abort"],
+            "description": "Intent cancelled before queueing"
+          },
+          {
+            "from": "QUEUED",
+            "to": "CANCELLED",
+            "conditions": ["manual_abort", "timeout_exceeded"],
+            "description": "Intent cancelled while in queue - manual abort or timeout"
+          },
+          {
+            "from": "CLAIMED",
+            "to": "CANCELLED",
+            "conditions": ["manual_abort", "intent_expired"],
+            "description": "Intent cancelled after claim - manual abort or expiry"
+          }
+        ],
+        "terminal_states": ["CANCELLED"]
+      },
+      "posting": {
+        "description": "Authoritative execution lifecycle. This is where posting succeeds or fails.",
+        "states": [
+          "QUEUED",
+          "CLAIMED",
+          "DISPATCH_ATTEMPTED",
+          "POSTED",
+          "POST_FAILED",
+          "DEAD_LETTER"
+        ],
+        "transitions": [
+          {
+            "from": "QUEUED",
+            "to": "CLAIMED",
+            "conditions": ["worker_available"],
+            "description": "Posting job claimed by worker"
+          },
+          {
+            "from": "CLAIMED",
+            "to": "DISPATCH_ATTEMPTED",
+            "conditions": ["dispatch_started"],
+            "description": "Platform dispatch initiated"
+          },
+          {
+            "from": "DISPATCH_ATTEMPTED",
+            "to": "POSTED",
+            "conditions": ["platform_success"],
+            "description": "Platform confirmed successful post"
+          },
+          {
+            "from": "DISPATCH_ATTEMPTED",
+            "to": "POST_FAILED",
+            "conditions": ["platform_error"],
+            "description": "Platform returned error or rejection"
+          },
+          {
+            "from": "POST_FAILED",
+            "to": "DISPATCH_ATTEMPTED",
+            "conditions": ["retry_allowed"],
+            "description": "Retry policy permits another attempt"
+          },
+          {
+            "from": "POST_FAILED",
+            "to": "DEAD_LETTER",
+            "conditions": ["retry_exhausted"],
+            "description": "Retry limit reached - permanent failure"
+          },
+          {
+            "from": "CLAIMED",
+            "to": "DEAD_LETTER",
+            "conditions": ["worker_crash", "fatal_validation_error"],
+            "description": "Unrecoverable error before dispatch - worker crash or fatal validation"
+          },
+          {
+            "from": "QUEUED",
+            "to": "DEAD_LETTER",
+            "conditions": ["intent_expired", "constraint_violation"],
+            "description": "Intent expired or constraint violated before claim"
+          }
+        ],
+        "terminal_states": ["POSTED", "DEAD_LETTER"]
+      },
+      "account": {
+        "description": "Operational account lifecycle. Accounts do not self-heal without explicit transitions. States match account_state.schema.json exactly.",
+        "states": [
+          "HEALTHY",
+          "WARMING",
+          "LIMITED",
+          "COOLDOWN",
+          "QUARANTINED",
+          "BANNED"
+        ],
+        "transitions": [
+          {
+            "from": "HEALTHY",
+            "to": "WARMING",
+            "conditions": ["account_initialization"],
+            "description": "New account entering warmup period"
+          },
+          {
+            "from": "WARMING",
+            "to": "HEALTHY",
+            "conditions": ["warmup_completed"],
+            "description": "Warmup period completed successfully"
+          },
+          {
+            "from": "HEALTHY",
+            "to": "LIMITED",
+            "conditions": ["suppression_detected"],
+            "description": "Platform suppression or shadowban detected"
+          },
+          {
+            "from": "LIMITED",
+            "to": "HEALTHY",
+            "conditions": ["suppression_lifted"],
+            "description": "Platform restrictions removed"
+          },
+          {
+            "from": "HEALTHY",
+            "to": "COOLDOWN",
+            "conditions": ["rate_limit_hit"],
+            "description": "Platform rate limit triggered cooldown"
+          },
+          {
+            "from": "COOLDOWN",
+            "to": "HEALTHY",
+            "conditions": ["cooldown_elapsed"],
+            "description": "Cooldown period completed"
+          },
+          {
+            "from": "WARMING",
+            "to": "LIMITED",
+            "conditions": ["suppression_detected"],
+            "description": "Suppression detected during warmup"
+          },
+          {
+            "from": "WARMING",
+            "to": "COOLDOWN",
+            "conditions": ["rate_limit_hit"],
+            "description": "Rate limit hit during warmup"
+          },
+          {
+            "from": "LIMITED",
+            "to": "COOLDOWN",
+            "conditions": ["rate_limit_hit"],
+            "description": "Rate limit hit while limited"
+          },
+          {
+            "from": "COOLDOWN",
+            "to": "LIMITED",
+            "conditions": ["suppression_detected"],
+            "description": "Suppression detected during cooldown"
+          },
+          {
+            "from": "HEALTHY",
+            "to": "QUARANTINED",
+            "conditions": ["anomaly_detected", "manual_quarantine"],
+            "description": "Account quarantined due to anomaly or manual intervention"
+          },
+          {
+            "from": "WARMING",
+            "to": "QUARANTINED",
+            "conditions": ["anomaly_detected", "manual_quarantine"],
+            "description": "Account quarantined during warmup"
+          },
+          {
+            "from": "LIMITED",
+            "to": "QUARANTINED",
+            "conditions": ["anomaly_detected", "manual_quarantine"],
+            "description": "Account quarantined from limited state"
+          },
+          {
+            "from": "COOLDOWN",
+            "to": "QUARANTINED",
+            "conditions": ["anomaly_detected", "manual_quarantine"],
+            "description": "Account quarantined from cooldown"
+          },
+          {
+            "from": "QUARANTINED",
+            "to": "HEALTHY",
+            "conditions": ["quarantine_lifted"],
+            "description": "Quarantine lifted - account restored to healthy"
+          },
+          {
+            "from": "QUARANTINED",
+            "to": "BANNED",
+            "conditions": ["policy_violation"],
+            "description": "Policy violation during quarantine leads to ban"
+          },
+          {
+            "from": "HEALTHY",
+            "to": "BANNED",
+            "conditions": ["policy_violation"],
+            "description": "Direct ban from healthy state"
+          },
+          {
+            "from": "WARMING",
+            "to": "BANNED",
+            "conditions": ["policy_violation"],
+            "description": "Policy violation during warmup leads to ban"
+          },
+          {
+            "from": "LIMITED",
+            "to": "BANNED",
+            "conditions": ["policy_violation"],
+            "description": "Policy violation while limited leads to ban"
+          },
+          {
+            "from": "COOLDOWN",
+            "to": "BANNED",
+            "conditions": ["policy_violation"],
+            "description": "Policy violation during cooldown leads to ban"
+          }
+        ],
+        "terminal_states": ["BANNED"]
+      }
+    },
+    "global_invariants": [
+      "terminal_states_are_absorbing",
+      "attempt_number_monotonic",
+      "no_cross_domain_backward_transitions",
+      "posting_requires_intent",
+      "no_silent_state_drift",
+      "timestamps_monotonic",
+      "account_state_precedes_posting",
+      "intent_immutable_after_claim",
+      "no_self_transitions",
+      "conditions_are_declarative",
+      "state_reachability_verifiable"
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "last_updated": "2024-12-19T00:00:00Z",
+      "enforcement_points": [
+        "posting_state_store.py",
+        "reconciliation.py",
+        "anomaly_detector.py",
+        "audit_logger.py",
+        "kill_switches.py"
+      ],
+      "notes": "Tier-0, invariant-locked, production-maximum specification. This contract makes silent corruption impossible, retries explicit, audits mechanical, and reconciliation deterministic. All state mutations must validate against this contract."
+    },
+    "$defs": {
+      "transition_schema": {
+        "type": "object",
+        "required": ["from", "to", "conditions"],
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Source state of the transition - must be in domain.states"
+          },
+          "to": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Target state of the transition - must be in domain.states"
+          },
+          "conditions": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "description": "Symbolic condition identifiers - evaluated by posting_state_store.py, reconciliation.py, anomaly_detector.py. NOT EXECUTABLE CODE."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 512,
+            "description": "Human-readable description of this transition"
+          }
+        },
+        "allOf": [
+          {
+            "description": "No self-transitions allowed - from and to must be different",
+            "not": {
+              "properties": {
+                "from": {},
+                "to": {}
+              },
+              "required": ["from", "to"]
+            }
+          }
+        ]
+      },
+      "domain_schema": {
+        "type": "object",
+        "required": ["states", "transitions", "terminal_states"],
+        "additionalProperties": false,
+        "properties": {
+          "states": {
+            "type": "array",
+            "uniqueItems": true,
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "All possible states in this domain - finite enum only"
+          },
+          "transitions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/transition_schema"
+            },
+            "description": "All allowed state transitions - NO OTHER TRANSITIONS ARE LEGAL"
+          },
+          "terminal_states": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Terminal states are absorbing - no transitions out"
+          }
+        },
+        "allOf": [
+          {
+            "description": "Terminal states cannot be source states in transitions",
+            "properties": {
+              "transitions": {
+                "items": {
+                  "not": {
+                    "properties": {
+                      "from": {
+                        "$ref": "#/properties/terminal_states/items"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "description": "All transition states must be in domain.states",
+            "properties": {
+              "transitions": {
+                "items": {
+                  "properties": {
+                    "from": {
+                      "$ref": "#/properties/states/items"
+                    },
+                    "to": {
+                      "$ref": "#/properties/states/items"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "description": "Terminal states must be subset of states",
+            "properties": {
+              "terminal_states": {
+                "items": {
+                  "$ref": "#/properties/states/items"
+                }
+              }
+            }
+          }
+        ],
+        "description": "Domain schema - validation rules enforced by posting_state_store.py, reconciliation.py, anomaly_detector.py. Terminal states cannot be source states. All transition states must be in domain.states. Terminal states must be subset of states."
+      },
+      "condition_catalog": {
+        "description": "Complete catalog of all symbolic condition identifiers - NOT EXECUTABLE CODE. These are evaluated by enforcement components.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "intent_conditions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "intent_valid",
+                "worker_available",
+                "manual_abort",
+                "timeout_exceeded",
+                "intent_expired"
+              ]
+            },
+            "description": "All conditions that can trigger intent domain transitions"
+          },
+          "posting_conditions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "dispatch_started",
+                "platform_success",
+                "platform_error",
+                "retry_allowed",
+                "retry_exhausted",
+                "worker_crash",
+                "fatal_validation_error",
+                "intent_expired",
+                "constraint_violation"
+              ]
+            },
+            "description": "All conditions that can trigger posting domain transitions"
+          },
+          "account_conditions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "account_initialization",
+                "warmup_completed",
+                "rate_limit_hit",
+                "cooldown_elapsed",
+                "suppression_detected",
+                "suppression_lifted",
+                "anomaly_detected",
+                "manual_quarantine",
+                "quarantine_lifted",
+                "policy_violation"
+              ]
+            },
+            "description": "All conditions that can trigger account domain transitions"
+          }
+        }
+      },
+      "enforcement_semantics": {
+        "description": "What happens when a transition is attempted that is not allowed",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "on_violation": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "write_rejection": {
+                "type": "string",
+                "const": "Write is rejected - no state mutation occurs"
+              },
+              "wal_preservation": {
+                "type": "string",
+                "const": "WAL entry preserved for forensics"
+              },
+              "anomaly_emission": {
+                "type": "string",
+                "const": "Anomaly event emitted to monitoring"
+              },
+              "optional_halt": {
+                "type": "string",
+                "const": "Optional system halt via kill switch"
+              },
+              "no_silent_correction": {
+                "type": "string",
+                "const": "NEVER silently correct or ignore violations"
+              }
+            }
+          }
+        }
+      },
+      "validation_requirements": {
+        "description": "Mandatory enforcement points - all components MUST validate against this contract",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "components": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "posting_state_store.py": {
+                "type": "string",
+                "const": "Validate before write - reject invalid transitions"
+              },
+              "reconciliation.py": {
+                "type": "string",
+                "const": "Validate historical logs - detect drift"
+              },
+              "anomaly_detector.py": {
+                "type": "string",
+                "const": "Detect violations in real-time"
+              },
+              "audit_logger.py": {
+                "type": "string",
+                "const": "Archive all violations for compliance"
+              },
+              "kill_switches.py": {
+                "type": "string",
+                "const": "Optional halt on critical violations"
+              }
+            }
+          }
+        }
+      },
+      "cross_domain_rules": {
+        "description": "Rules that span multiple domains - enforced by global_invariants",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "posting_requires_intent": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rule": {
+                "type": "string",
+                "const": "Every posting state must reference a valid intent_id that exists in intent domain"
+              },
+              "enforcement": {
+                "type": "string",
+                "const": "Foreign key validation in posting_state_store.py"
+              }
+            }
+          },
+          "account_state_precedes_posting": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rule": {
+                "type": "string",
+                "const": "Account must be in HEALTHY, WARMING, or LIMITED state before posting can transition to CLAIMED"
+              },
+              "enforcement": {
+                "type": "string",
+                "const": "Pre-condition check in dispatch logic"
+              }
+            }
+          },
+          "intent_immutable_after_claim": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rule": {
+                "type": "string",
+                "const": "Intent cannot transition after it reaches CLAIMED state - only posting domain continues"
+              },
+              "enforcement": {
+                "type": "string",
+                "const": "State lock check in intent store"
+              }
+            }
+          }
+        }
+      }
+    }
+  }

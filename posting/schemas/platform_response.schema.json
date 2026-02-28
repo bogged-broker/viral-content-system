@@ -1,0 +1,666 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://posting.system/schemas/platform_response.schema.json",
+    "title": "Canonical Platform Response Contract",
+    "description": "Tier-0, invariant-locked, production-maximum specification. Raw, normalized, lossless contract for what a platform returned in response to a posting attempt. Captures facts, not conclusions. The only allowed shape of data flowing from platform SDKs, HTTP APIs, upload endpoints, and publish endpoints into the system. No field is allowed to be dropped or invented. This schema preserves platform truth exactly as received, in a normalized envelope. Nothing bypasses this schema.",
+    
+    "type": "object",
+    "required": [
+      "schema_version",
+      "platform",
+      "endpoint",
+      "request_id",
+      "timestamp",
+      "http",
+      "raw_body"
+    ],
+    "additionalProperties": false,
+    
+    "properties": {
+      "schema_version": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+\\.\\d+$",
+        "const": "1.0.0",
+        "description": "Schema version. Must be '1.0.0'. Breaking changes require version bump. Consumers must declare supported versions."
+      },
+      
+      "platform": {
+        "type": "string",
+        "enum": [
+          "youtube",
+          "tiktok",
+          "instagram",
+          "facebook",
+          "twitter",
+          "linkedin",
+          "pinterest",
+          "snapchat",
+          "reddit",
+          "twitch"
+        ],
+        "description": "Normalized platform identifier. Used for downstream adapters. Must be lowercase, stable across API versions."
+      },
+      
+      "endpoint": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100,
+        "pattern": "^[a-z0-9_]+$",
+        "description": "Logical operation name, not URL. Stable across SDK versions. Must be lowercase alphanumeric with underscores. Examples: 'upload_video', 'publish_post', 'create_media', 'update_post', 'delete_post'."
+      },
+      
+      "request_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Globally unique identifier generated before request dispatch. Used for idempotency, retries, reconciliation, and audits. UUIDv7 preferred."
+      },
+      
+      "timestamp": {
+        "type": "number",
+        "minimum": 1000000000.0,
+        "maximum": 9999999999.0,
+        "description": "Unix epoch seconds (float). Captured at response receipt time, not request start time. Must be reasonable timestamp (year 2001-2286). Precision to microseconds allowed."
+      },
+      
+      "http": {
+        "type": "object",
+        "required": [
+          "status_code"
+        ],
+        "additionalProperties": false,
+        "description": "Transport-level truth. No interpretation. Raw HTTP facts as received. Captures transport reality exactly as observed.",
+        "properties": {
+          "status_code": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 599,
+            "description": "HTTP status code as returned by the platform. Required even for SDK-based requests. Use 0 for timeouts or connection failures where no HTTP response was received."
+          },
+          
+          "headers": {
+            "type": ["object", "null"],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Relevant HTTP response headers as received. Store platform request IDs, rate limit headers, etc. Keys should be lowercase. Null if no headers available or applicable (e.g., connection failures). Never omit this field - use null if unavailable."
+          },
+          
+          "latency_ms": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "description": "Round-trip latency in milliseconds from request dispatch to response receipt. Null if latency cannot be measured. Never omit - use null if unavailable."
+          },
+          
+          "timeout": {
+            "type": ["boolean", "null"],
+            "description": "Whether the request timed out. True if timeout occurred, false if not, null if timeout status is unknown. Never omit - use null if unknown."
+          },
+          
+          "connection_error": {
+            "type": ["boolean", "null"],
+            "description": "Whether a connection-level error occurred (DNS, TCP, TLS). True if error, false if no error, null if connection status is unknown. Never omit - use null if unknown."
+          }
+        }
+      },
+      
+      "platform_status": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "description": "Platform-native semantic status. Captures platform signals exactly as provided, not system judgment. Null if platform provides no structured status. If present, all fields must be explicitly null if platform did not provide them - never omit fields conditionally.",
+        "properties": {
+          "code": {
+            "type": ["string", "null"],
+            "description": "Platform-native status code as provided by platform. Examples: 'SUCCESS', 'ERROR', 'PENDING', 'CREATED'. Null if platform does not provide this field. Never omit - use null if not provided."
+          },
+          
+          "subcode": {
+            "type": ["string", "null"],
+            "description": "Platform-native substatus or error type as provided by platform. Examples: 'VIDEO_PUBLISHED', 'RATE_LIMIT_EXCEEDED', 'INVALID_TOKEN', 'QUOTA_EXCEEDED'. Null if platform does not provide this field. Never omit - use null if not provided."
+          },
+          
+          "message": {
+            "type": ["string", "null"],
+            "maxLength": 2000,
+            "description": "Human-readable platform message exactly as provided. Max 2000 characters. Truncate if longer. Null if platform does not provide a message. Never omit - use null if not provided."
+          },
+          
+          "retryable": {
+            "type": ["boolean", "null"],
+            "description": "Platform's explicit signal about retry-ability, if provided. True if platform explicitly says retry, false if platform explicitly says do not retry, null if platform does not indicate. DO NOT INFER THIS VALUE. Never omit - use null if platform does not indicate."
+          },
+          
+          "error_code": {
+            "type": ["integer", "string", "null"],
+            "description": "Platform-specific error code exactly as provided (may be integer or string depending on platform). Examples: 88, 190, 403, 'E123', 'QUOTA_EXCEEDED'. Null if platform does not provide an error code. Never omit - use null if not provided."
+          },
+          
+          "debug_info": {
+            "type": ["string", "null"],
+            "maxLength": 5000,
+            "description": "Platform-provided debug information, trace ID, or request ID exactly as provided. Max 5000 characters. Truncate if longer. Null if platform does not provide debug info. Never omit - use null if not provided."
+          }
+        }
+      },
+      
+      "payload": {
+        "type": ["object", "null"],
+        "description": "Normalized, structured extraction of useful fields from the response. Optional but encouraged. Shape varies by platform and endpoint. This block enables efficient downstream processing while raw_body preserves exact truth. All fields use explicit null semantics - never omit fields conditionally.",
+        "additionalProperties": true,
+        "properties": {
+          "remote_post_id": {
+            "type": ["string", "null"],
+            "description": "Platform's identifier for the created/updated post, extracted from response. Examples: 'dQw4w9WgXcQ', 'urn:li:share:123456789', '987654321'. Null if not available in response or not applicable to this endpoint. Never omit - use null if unavailable."
+          },
+          
+          "remote_media_id": {
+            "type": ["string", "null"],
+            "description": "Platform's identifier for uploaded media, extracted from response. May differ from remote_post_id for multi-step uploads. Null if not available in response or not applicable. Never omit - use null if unavailable."
+          },
+          
+          "visibility": {
+            "type": ["string", "null"],
+            "description": "Confirmed visibility/privacy setting of the post as reported by platform. Examples: 'PUBLIC', 'PRIVATE', 'UNLISTED', 'FOLLOWERS_ONLY', 'FRIENDS', 'CUSTOM'. Values are platform-specific - do not normalize. Null if platform does not provide. Never omit - use null if not provided."
+          },
+          
+          "processing_state": {
+            "type": ["string", "null"],
+            "description": "Platform's processing state for async operations as reported by platform. Examples: 'COMPLETED', 'PROCESSING', 'PENDING', 'FAILED', 'QUEUED', 'UPLOADING'. Values are platform-specific - preserve exactly as provided. Null if not applicable or not provided. Never omit - use null if not provided."
+          },
+          
+          "permalink": {
+            "type": ["string", "null"],
+            "format": "uri",
+            "description": "Canonical URL to view the post as provided by platform. Must be valid URI if present. Null if platform does not provide URL or post is not yet viewable. Never omit - use null if not provided."
+          },
+          
+          "published_at": {
+            "type": ["number", "null"],
+            "description": "Unix timestamp (float) when platform confirms publication, extracted from response. Null if platform does not provide timestamp or post is still pending. Never omit - use null if not provided."
+          },
+          
+          "media_urls": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "URLs of uploaded/processed media assets as provided by platform. Array of valid URIs. Empty array is distinct from null - use null if field not applicable, [] if platform provided empty list. Never omit - use null if field not provided by platform."
+          },
+          
+          "warnings": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string"
+            },
+            "description": "Platform-provided warnings that don't prevent success, exactly as provided. Array of warning strings. Empty array is distinct from null - use null if field not applicable, [] if platform provided empty list. Never omit - use null if field not provided by platform."
+          }
+        }
+      },
+      
+      "raw_body": {
+        "type": "string",
+        "description": "MANDATORY. Full response body as received from platform, exactly as returned. Must be stringified if originally JSON/binary. Never mutated. Never dropped. Never truncated. This is the legal and forensic fallback. For JSON responses, preserve exact JSON string. For binary responses, use base64 encoding. For empty responses, use empty string ''. This field is the source of truth - all other fields are derived from this."
+      },
+      
+      "metadata": {
+        "type": ["object", "null"],
+        "description": "Annotation-only metadata. Ignored by business logic. Used for debugging, observability, and audit correlation. Optional. Null if no metadata available. All fields within are optional.",
+        "additionalProperties": true,
+        "properties": {
+          "sdk_version": {
+            "type": "string",
+            "description": "Version of the platform SDK or client library used. Examples: '2.108.0', '4.14.0', '15.0'."
+          },
+          
+          "sdk_name": {
+            "type": "string",
+            "description": "Name of the SDK or client library used. Examples: 'google-api-python-client', 'facebook-sdk', 'tweepy', 'facebook-business-sdk'."
+          },
+          
+          "region": {
+            "type": "string",
+            "description": "Geographic region or API endpoint region used. Examples: 'us-east-1', 'eu-west-1', 'asia-pacific-1'."
+          },
+          
+          "account_id": {
+            "type": "string",
+            "description": "Internal account identifier for correlation. Not platform account ID. Format: 'acct_<platform>_<id>'."
+          },
+          
+          "intent_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Reference to the originating post_intent for correlation. UUID format."
+          },
+          
+          "attempt_number": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Which retry attempt this response corresponds to. Starts at 1 for first attempt."
+          },
+          
+          "request_sent_at": {
+            "type": "number",
+            "description": "Unix timestamp (float) when request was dispatched. Used with timestamp for latency calculation."
+          },
+          
+          "dispatcher_id": {
+            "type": "string",
+            "description": "Identifier of the dispatcher/worker/process that sent the request. Examples: 'dispatcher-01', 'worker-42'."
+          },
+          
+          "notes": {
+            "type": "string",
+            "maxLength": 2000,
+            "description": "Freeform notes for debugging or audit trail. Max 2000 characters. Truncate if longer."
+          }
+        }
+      }
+    },
+    
+    "$comment": "Tier-0 Production Contract: This schema is the ONLY allowed shape for platform responses. It preserves external reality exactly once, forever. No platform response is interpreted prematurely. Retry decisions are auditable. Error classification is reproducible. Ghost posts can be reconciled. Platform lies are detectable. This schema guarantees: lossless capture, explicit ambiguity, platform-agnostic shape, deterministic parsing, audit survivability.",
+    
+    "examples": [
+      {
+        "schema_version": "1.0.0",
+        "platform": "youtube",
+        "endpoint": "upload_video",
+        "request_id": "01936c8e-7b4a-7890-1234-567890abcdef",
+        "timestamp": 1730000456.789,
+        "http": {
+          "status_code": 200,
+          "headers": {
+            "x-goog-request-id": "abc123def456",
+            "content-type": "application/json"
+          },
+          "latency_ms": 3421.5,
+          "timeout": false,
+          "connection_error": false
+        },
+        "platform_status": {
+          "code": "SUCCESS",
+          "subcode": "VIDEO_PUBLISHED",
+          "message": "Video uploaded and published successfully",
+          "retryable": false,
+          "error_code": null,
+          "debug_info": null
+        },
+        "payload": {
+          "remote_post_id": "dQw4w9WgXcQ",
+          "remote_media_id": "dQw4w9WgXcQ",
+          "visibility": "PUBLIC",
+          "processing_state": "COMPLETED",
+          "permalink": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          "published_at": 1730000456.0,
+          "media_urls": [
+            "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"
+          ],
+          "warnings": null
+        },
+        "raw_body": "{\"id\":\"dQw4w9WgXcQ\",\"snippet\":{\"publishedAt\":\"2024-10-27T12:34:16Z\",\"title\":\"My Video\"},\"status\":{\"uploadStatus\":\"uploaded\",\"privacyStatus\":\"public\"}}",
+        "metadata": {
+          "sdk_version": "2.108.0",
+          "sdk_name": "google-api-python-client",
+          "account_id": "acct_youtube_12345",
+          "intent_id": "01936c8e-7b4a-7890-9999-567890abcdef",
+          "attempt_number": 1,
+          "dispatcher_id": "dispatcher-01"
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "platform": "twitter",
+        "endpoint": "create_tweet",
+        "request_id": "01936c8e-7b4a-7890-5678-567890abcdef",
+        "timestamp": 1730000789.123,
+        "http": {
+          "status_code": 429,
+          "headers": {
+            "x-rate-limit-remaining": "0",
+            "x-rate-limit-reset": "1730001389"
+          },
+          "latency_ms": 156.3,
+          "timeout": false,
+          "connection_error": false
+        },
+        "platform_status": {
+          "code": "ERROR",
+          "subcode": "RATE_LIMIT_EXCEEDED",
+          "message": "Rate limit exceeded. Please wait before trying again.",
+          "retryable": true,
+          "error_code": 88,
+          "debug_info": "Request ID: abc-def-123"
+        },
+        "payload": null,
+        "raw_body": "{\"errors\":[{\"code\":88,\"message\":\"Rate limit exceeded\"}]}",
+        "metadata": {
+          "sdk_version": "4.14.0",
+          "sdk_name": "tweepy",
+          "account_id": "acct_twitter_67890",
+          "intent_id": "01936c8e-7b4a-7890-8888-567890abcdef",
+          "attempt_number": 2,
+          "request_sent_at": 1730000789.0
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "platform": "instagram",
+        "endpoint": "publish_post",
+        "request_id": "01936c8e-7b4a-7890-9abc-567890abcdef",
+        "timestamp": 1730001234.567,
+        "http": {
+          "status_code": 401,
+          "headers": {
+            "www-authenticate": "Bearer realm=\"Instagram API\""
+          },
+          "latency_ms": 234.7,
+          "timeout": false,
+          "connection_error": false
+        },
+        "platform_status": {
+          "code": "ERROR",
+          "subcode": "INVALID_TOKEN",
+          "message": "The access token is invalid or has expired",
+          "retryable": false,
+          "error_code": 190,
+          "debug_info": "Error validating access token"
+        },
+        "payload": null,
+        "raw_body": "{\"error\":{\"message\":\"Error validating access token: Session has expired.\",\"type\":\"OAuthException\",\"code\":190,\"fbtrace_id\":\"ABC123\"}}",
+        "metadata": {
+          "sdk_version": "15.0",
+          "sdk_name": "facebook-business-sdk",
+          "account_id": "acct_instagram_11111",
+          "intent_id": "01936c8e-7b4a-7890-7777-567890abcdef",
+          "attempt_number": 1
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "platform": "tiktok",
+        "endpoint": "upload_video",
+        "request_id": "01936c8e-7b4a-7890-def0-567890abcdef",
+        "timestamp": 1730002000.0,
+        "http": {
+          "status_code": 0,
+          "headers": null,
+          "latency_ms": 30000.0,
+          "timeout": true,
+          "connection_error": null
+        },
+        "platform_status": null,
+        "payload": null,
+        "raw_body": "",
+        "metadata": {
+          "sdk_version": "1.2.3",
+          "sdk_name": "tiktok-business-api",
+          "account_id": "acct_tiktok_22222",
+          "intent_id": "01936c8e-7b4a-7890-6666-567890abcdef",
+          "attempt_number": 1,
+          "notes": "Request timed out after 30 seconds"
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "platform": "linkedin",
+        "endpoint": "create_share",
+        "request_id": "01936c8e-7b4a-7890-1111-567890abcdef",
+        "timestamp": 1730003000.5,
+        "http": {
+          "status_code": 201,
+          "headers": {
+            "x-restli-id": "urn:li:share:123456789",
+            "x-linkedin-request-id": "REQ-abc-123"
+          },
+          "latency_ms": 892.3,
+          "timeout": false,
+          "connection_error": false
+        },
+        "platform_status": {
+          "code": "CREATED",
+          "subcode": null,
+          "message": null,
+          "retryable": false,
+          "error_code": null,
+          "debug_info": null
+        },
+        "payload": {
+          "remote_post_id": "urn:li:share:123456789",
+          "remote_media_id": null,
+          "visibility": "PUBLIC",
+          "processing_state": "COMPLETED",
+          "permalink": "https://www.linkedin.com/feed/update/urn:li:share:123456789",
+          "published_at": 1730003000.0,
+          "media_urls": null,
+          "warnings": null
+        },
+        "raw_body": "{\"id\":\"urn:li:share:123456789\",\"activity\":\"urn:li:activity:123456789\",\"created\":{\"time\":1730003000000}}",
+        "metadata": {
+          "sdk_version": "0.8.1",
+          "sdk_name": "linkedin-api-python-client",
+          "account_id": "acct_linkedin_33333",
+          "intent_id": "01936c8e-7b4a-7890-5555-567890abcdef",
+          "attempt_number": 1
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "platform": "facebook",
+        "endpoint": "publish_video",
+        "request_id": "01936c8e-7b4a-7890-2222-567890abcdef",
+        "timestamp": 1730004500.25,
+        "http": {
+          "status_code": 200,
+          "headers": {
+            "facebook-api-version": "v18.0"
+          },
+          "latency_ms": 15234.8,
+          "timeout": false,
+          "connection_error": false
+        },
+        "platform_status": {
+          "code": "SUCCESS",
+          "subcode": "VIDEO_PROCESSING",
+          "message": "Video uploaded successfully and is being processed",
+          "retryable": false,
+          "error_code": null,
+          "debug_info": null
+        },
+        "payload": {
+          "remote_post_id": "987654321",
+          "remote_media_id": "987654321",
+          "visibility": "PUBLIC",
+          "processing_state": "PROCESSING",
+          "permalink": null,
+          "published_at": null,
+          "media_urls": null,
+          "warnings": [
+            "Video quality may be reduced during processing"
+          ]
+        },
+        "raw_body": "{\"id\":\"987654321\",\"status\":\"processing\"}",
+        "metadata": {
+          "sdk_version": "18.0.0",
+          "sdk_name": "facebook-sdk",
+          "region": "us-east-1",
+          "account_id": "acct_facebook_44444",
+          "intent_id": "01936c8e-7b4a-7890-4444-567890abcdef",
+          "attempt_number": 1
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "platform": "youtube",
+        "endpoint": "upload_video",
+        "request_id": "01936c8e-7b4a-7890-3333-567890abcdef",
+        "timestamp": 1730005000.0,
+        "http": {
+          "status_code": 403,
+          "headers": {
+            "x-goog-request-id": "error-123"
+          },
+          "latency_ms": 456.2,
+          "timeout": false,
+          "connection_error": false
+        },
+        "platform_status": {
+          "code": "ERROR",
+          "subcode": "QUOTA_EXCEEDED",
+          "message": "The request cannot be completed because you have exceeded your quota.",
+          "retryable": true,
+          "error_code": 403,
+          "debug_info": "Daily upload quota exceeded"
+        },
+        "payload": null,
+        "raw_body": "{\"error\":{\"errors\":[{\"domain\":\"youtube.quota\",\"reason\":\"quotaExceeded\",\"message\":\"The request cannot be completed because you have exceeded your <a href=\\\"/youtube/v3/getting-started#quota\\\">quota</a>.\"}],\"code\":403,\"message\":\"The request cannot be completed because you have exceeded your quota.\"}}",
+        "metadata": {
+          "sdk_version": "2.108.0",
+          "sdk_name": "google-api-python-client",
+          "account_id": "acct_youtube_55555",
+          "intent_id": "01936c8e-7b4a-7890-3333-567890abcdef",
+          "attempt_number": 3,
+          "notes": "Quota reset at midnight UTC"
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "platform": "youtube",
+        "endpoint": "upload_video",
+        "request_id": "01936c8e-7b4a-7890-5555-567890abcdef",
+        "timestamp": 1730006000.0,
+        "http": {
+          "status_code": 0,
+          "headers": null,
+          "latency_ms": null,
+          "timeout": null,
+          "connection_error": true
+        },
+        "platform_status": null,
+        "payload": null,
+        "raw_body": "",
+        "metadata": {
+          "sdk_version": "2.108.0",
+          "sdk_name": "google-api-python-client",
+          "account_id": "acct_youtube_66666",
+          "intent_id": "01936c8e-7b4a-7890-5555-567890abcdef",
+          "attempt_number": 1,
+          "notes": "DNS resolution failed"
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "platform": "instagram",
+        "endpoint": "publish_post",
+        "request_id": "01936c8e-7b4a-7890-6666-567890abcdef",
+        "timestamp": 1730007000.0,
+        "http": {
+          "status_code": 200,
+          "headers": {
+            "x-ig-request-id": "ig-req-abc123",
+            "content-type": "application/json"
+          },
+          "latency_ms": 1234.56,
+          "timeout": false,
+          "connection_error": false
+        },
+        "platform_status": {
+          "code": "SUCCESS",
+          "subcode": null,
+          "message": null,
+          "retryable": null,
+          "error_code": null,
+          "debug_info": null
+        },
+        "payload": {
+          "remote_post_id": "17841405309213250",
+          "remote_media_id": null,
+          "visibility": null,
+          "processing_state": null,
+          "permalink": "https://www.instagram.com/p/ABC123DEF/",
+          "published_at": 1730006995.0,
+          "media_urls": null,
+          "warnings": null
+        },
+        "raw_body": "{\"id\":\"17841405309213250\",\"permalink\":\"https://www.instagram.com/p/ABC123DEF/\",\"timestamp\":1730006995}",
+        "metadata": null
+      },
+      {
+        "schema_version": "1.0.0",
+        "platform": "tiktok",
+        "endpoint": "publish_video",
+        "request_id": "01936c8e-7b4a-7890-7777-567890abcdef",
+        "timestamp": 1730008000.0,
+        "http": {
+          "status_code": 500,
+          "headers": {
+            "x-tt-trace-id": "00-abc123def456-789",
+            "content-type": "application/json"
+          },
+          "latency_ms": 345.67,
+          "timeout": false,
+          "connection_error": false
+        },
+        "platform_status": {
+          "code": "ERROR",
+          "subcode": "INTERNAL_ERROR",
+          "message": "Internal server error. Please try again later.",
+          "retryable": null,
+          "error_code": "INTERNAL_ERROR",
+          "debug_info": "Trace ID: 00-abc123def456-789"
+        },
+        "payload": null,
+        "raw_body": "{\"error\":{\"code\":\"INTERNAL_ERROR\",\"message\":\"Internal server error. Please try again later.\",\"log_id\":\"00-abc123def456-789\"}}",
+        "metadata": {
+          "sdk_version": "1.2.3",
+          "sdk_name": "tiktok-business-api",
+          "account_id": "acct_tiktok_77777",
+          "intent_id": "01936c8e-7b4a-7890-7777-567890abcdef",
+          "attempt_number": 1
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "platform": "twitter",
+        "endpoint": "create_tweet",
+        "request_id": "01936c8e-7b4a-7890-8888-567890abcdef",
+        "timestamp": 1730009000.0,
+        "http": {
+          "status_code": 200,
+          "headers": {
+            "x-rate-limit-remaining": "950",
+            "x-rate-limit-reset": "1730012600",
+            "x-response-time": "234"
+          },
+          "latency_ms": 234.0,
+          "timeout": false,
+          "connection_error": false
+        },
+        "platform_status": {
+          "code": "SUCCESS",
+          "subcode": "TWEET_CREATED",
+          "message": null,
+          "retryable": false,
+          "error_code": null,
+          "debug_info": null
+        },
+        "payload": {
+          "remote_post_id": "1234567890123456789",
+          "remote_media_id": null,
+          "visibility": "PUBLIC",
+          "processing_state": "COMPLETED",
+          "permalink": "https://twitter.com/user/status/1234567890123456789",
+          "published_at": 1730008998.0,
+          "media_urls": [],
+          "warnings": []
+        },
+        "raw_body": "{\"data\":{\"id\":\"1234567890123456789\",\"text\":\"Hello world\",\"created_at\":\"2024-10-27T14:30:00.000Z\"}}",
+        "metadata": {
+          "sdk_version": "4.14.0",
+          "sdk_name": "tweepy",
+          "account_id": "acct_twitter_88888",
+          "intent_id": "01936c8e-7b4a-7890-8888-567890abcdef",
+          "attempt_number": 1
+        }
+      }
+    ]
+  }

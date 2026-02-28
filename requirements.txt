@@ -1,0 +1,43 @@
+# Core dependencies
+pandas==2.0.3
+numpy==1.27.2
+scikit-learn==1.3.0
+torch==2.1.0
+pyyaml==6.0
+tqdm==4.66.1
+aiohttp==3.9.5
+
+# Data processing & visualization
+matplotlib==3.8.0
+seaborn==0.12.3
+
+# Scientific computing & statistics
+scipy==1.11.4
+statsmodels==0.14.2
+networkx==3.2.1
+
+# Production monitoring & observability
+prometheus-client==0.17.1
+psutil==5.9.6
+
+# Data storage & formats
+pyarrow==12.0.1
+fastparquet==2023.8.0
+
+# Optional NLP / embeddings
+transformers==4.34.0
+sentence-transformers==2.2.2
+
+# Async & scheduling
+apscheduler==3.11.1
+
+# Dev & testing
+pytest==8.2.0
+black==24.3.0
+flake8==7.0.0
+mypy==1.5.1
+ipython==8.17.0
+jupyterlab==4.3.0
+
+# Cloud / storage
+boto3==1.28.50

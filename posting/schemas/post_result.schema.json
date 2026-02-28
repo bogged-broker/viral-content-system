@@ -1,0 +1,705 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://posting.system/schemas/post_result.schema.json",
+    "title": "Immutable Posting Outcome Contract (Ground Truth Schema)",
+    "description": "post_result.schema.json is the canonical, immutable representation of posting outcomes. It answers exactly one question: 'Given an intent, what verifiably happened when execution occurred?' This schema is the ground truth consumed by monitoring, learning, audits, billing, suppression analysis, and trust modeling. If this schema is wrong, you cannot distinguish failure from punishment. This is finalized fact, even for failures. Each attempt produces at most one result record. Retries create new result records, not mutations. Attempt-scoped, append-only, platform-normalized, explicit failure semantics, audit-grade.",
+    
+    "type": "object",
+    "required": [
+      "schema_version",
+      "result_id",
+      "intent_id",
+      "attempt_number",
+      "recorded_at",
+      "platform",
+      "account_id",
+      "outcome"
+    ],
+    "additionalProperties": false,
+    
+    "properties": {
+      "schema_version": {
+        "type": "string",
+        "const": "1.0.0",
+        "description": "Schema version. MANDATORY: Must be '1.0.0'. Rules: backward compatible only, no silent evolution, consumers must declare support."
+      },
+      
+      "result_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "description": "Globally unique result identifier. UUIDv7 preferred (version 7 in position 14). Never reused. Primary key for result lineage. CRITICAL: Used for deduplication and idempotency."
+      },
+      
+      "intent_id": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        "description": "References the originating post_intent. Must reference a valid post_intent. Immutable join key for replay correlation. Never changes once set."
+      },
+      
+      "attempt_number": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000,
+        "description": "Strictly monotonic attempt counter per intent. Starts at 1. Never inferred. Prevents retry ambiguity. CRITICAL: Used to distinguish retry attempts from original attempts."
+      },
+      
+      "recorded_at": {
+        "type": "number",
+        "minimum": 1000000000.0,
+        "maximum": 9999999999.0,
+        "description": "Unix timestamp (float) when outcome was finalized. Not dispatch start time. Must be reasonable timestamp (year 2001-2286). Precision to microseconds allowed. CRITICAL: Used for audit ordering and replay correlation."
+      },
+      
+      "platform": {
+        "type": "string",
+        "enum": ["youtube", "tiktok", "instagram", "shorts"],
+        "description": "Target platform. Enumerated string only. No free-form platform names allowed. Used for platform-specific routing and normalization."
+      },
+      
+      "account_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "description": "Opaque platform-scoped account identifier. Never resolved in this schema. Used for account-level correlation and routing."
+      },
+      
+      "outcome": {
+        "type": "object",
+        "required": ["status", "terminal", "retryable", "error_category"],
+        "additionalProperties": false,
+        "description": "Authoritative status of the posting attempt. Feeds risk and rollout logic. HARD RULES: terminal=true forbids retries; retryable=true requires terminal=false; suppressed ≠ failure; unknown is allowed but dangerous.",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["success", "failure", "suppressed", "unknown"],
+            "description": "Final outcome status. 'suppressed' is distinct from 'failure' (post succeeded but visibility limited). 'unknown' is allowed but dangerous (indicates incomplete observation)."
+          },
+          "terminal": {
+            "type": "boolean",
+            "description": "If true, no retries permitted. Must be true for 'success' and 'suppressed'. If false, retry may be attempted based on retryable flag."
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "If true, retry is recommended. Requires terminal=false. Must be false if terminal=true. Used by dispatcher to determine retry eligibility."
+          },
+          "error_category": {
+            "type": "string",
+            "enum": ["none", "auth", "rate_limit", "content", "platform", "unknown"],
+            "description": "Normalized error category for failure classification. 'none' for success/suppressed. Used for pattern detection and kill switch triggers."
+          },
+          "error_code": {
+            "type": ["string", "null"],
+            "maxLength": 256,
+            "description": "Platform-specific or normalized error code. Optional. Examples: 'QUOTA_EXCEEDED', 'INVALID_TOKEN', '403'. Null if not applicable. Never omit - use null if unavailable."
+          },
+          "error_message": {
+            "type": ["string", "null"],
+            "maxLength": 2000,
+            "description": "Human-readable error description. Optional. No secrets, no PII. Truncate if longer than 2000 chars. Null if not applicable. Never omit - use null if unavailable."
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "terminal": { "const": true } },
+              "required": ["terminal"]
+            },
+            "then": {
+              "properties": { "retryable": { "const": false } }
+            }
+          },
+          {
+            "if": {
+              "properties": { "retryable": { "const": true } },
+              "required": ["retryable"]
+            },
+            "then": {
+              "properties": { "terminal": { "const": false } }
+            }
+          },
+          {
+            "if": {
+              "properties": { "status": { "enum": ["success", "suppressed"] } },
+              "required": ["status"]
+            },
+            "then": {
+              "properties": { 
+                "terminal": { "const": true },
+                "error_category": { "const": "none" }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "status": { "const": "success" } },
+              "required": ["status"]
+            },
+            "then": {
+              "properties": {
+                "error_code": { "const": null },
+                "error_message": { "const": null }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "error_category": { "const": "none" } },
+              "required": ["error_category"]
+            },
+            "then": {
+              "properties": {
+                "status": { "enum": ["success", "suppressed"] }
+              }
+            }
+          }
+        ]
+      },
+      
+      "platform_response": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "description": "Normalized platform response data. No raw blobs or secrets. Raw responses belong in cold storage, not here. Null if no platform response available. Never omit - use null if unavailable.",
+        "properties": {
+          "remote_post_id": {
+            "type": ["string", "null"],
+            "maxLength": 512,
+            "description": "Platform-assigned post identifier, if available. Examples: 'dQw4w9WgXcQ', 'urn:li:share:123456789'. Null if not available. Never omit - use null if unavailable."
+          },
+          "http_status": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 599,
+            "description": "HTTP status code from platform API. Use 0 for timeouts or connection failures where no HTTP response was received. Null if HTTP status is unknown. Never omit - use null if unknown."
+          },
+          "platform_timestamp": {
+            "type": ["number", "null"],
+            "minimum": 1000000000.0,
+            "maximum": 9999999999.0,
+            "description": "Unix timestamp from platform, if provided. Null if platform does not provide timestamp. Never omit - use null if unavailable."
+          },
+          "warnings": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "maxItems": 100,
+            "description": "Platform-issued warnings or notices that don't prevent success. Empty array is distinct from null - use null if field not applicable, [] if platform provided empty list. Never omit - use null if field not provided by platform."
+          }
+        }
+      },
+      
+      "metrics": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "description": "Observed performance metrics. Not predicted. Used by post_health_tracker.py, suppression detection, and rollout feedback. Null if no metrics available. Never omit - use null if unavailable.",
+        "properties": {
+          "latency_ms": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 86400000,
+            "description": "Total request latency in milliseconds. Null if latency cannot be measured. Never omit - use null if unavailable."
+          },
+          "upload_duration_ms": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 86400000,
+            "description": "Media upload duration in milliseconds, if applicable. Null if not applicable or cannot be measured. Never omit - use null if unavailable."
+          },
+          "processing_duration_ms": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 86400000,
+            "description": "Platform processing time in milliseconds, if known. Null if not applicable or unknown. Never omit - use null if unavailable."
+          },
+          "initial_visibility": {
+            "type": ["string", "null"],
+            "enum": ["public", "limited", "shadowed", null],
+            "description": "Initial post visibility state as observed or reported by platform. Null if visibility is unknown or not applicable. Never omit - use null if unavailable."
+          }
+        }
+      },
+      
+      "trust_effects": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "description": "Declarative trust effects only. No scoring. No interpretation. Just facts. Used by account_state_store.py and risk_evaluator.py. Null if no trust effects observed. Never omit - use null if unavailable.",
+        "properties": {
+          "account_warning": {
+            "type": ["boolean", "null"],
+            "description": "Whether account received a warning from this attempt. True if warning received, false if no warning, null if warning status is unknown. Never omit - use null if unknown."
+          },
+          "strike_received": {
+            "type": ["boolean", "null"],
+            "description": "Whether account received a strike from this attempt. True if strike received, false if no strike, null if strike status is unknown. Never omit - use null if unknown."
+          },
+          "rate_limited": {
+            "type": ["boolean", "null"],
+            "description": "Whether rate limit was encountered. True if rate limited, false if not rate limited, null if rate limit status is unknown. Never omit - use null if unknown."
+          },
+          "cooldown_seconds": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 31536000,
+            "description": "Required cooldown period in seconds, if imposed. Null if no cooldown or cooldown duration is unknown. Never omit - use null if unknown."
+          }
+        }
+      },
+      
+      "metadata": {
+        "type": ["object", "null"],
+        "additionalProperties": true,
+        "description": "Annotation only. Ignored by core logic. Used for audits and debugging. Null if no metadata available. All fields within are optional. Additional properties allowed for extensibility.",
+        "properties": {
+          "dispatcher_id": {
+            "type": ["string", "null"],
+            "maxLength": 128,
+            "description": "Identifier of the dispatcher that created this result. Examples: 'dispatcher-03', 'worker-42'. Null if not available."
+          },
+          "worker_id": {
+            "type": ["string", "null"],
+            "maxLength": 128,
+            "description": "Worker or process identifier. Null if not available."
+          },
+          "notes": {
+            "type": ["string", "null"],
+            "maxLength": 5000,
+            "description": "Free-form notes for audit trail. Max 5000 characters. Truncate if longer. Null if no notes."
+          }
+        }
+      }
+    },
+    
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "outcome": {
+              "properties": {
+                "status": { "const": "success" }
+              },
+              "required": ["status"]
+            }
+          },
+          "required": ["outcome"]
+        },
+        "then": {
+          "properties": {
+            "platform_response": {
+              "properties": {
+                "http_status": {
+                  "anyOf": [
+                    { "type": "integer", "minimum": 200, "maximum": 299 },
+                    { "type": "null" }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    
+    "$defs": {
+      "forbidden_patterns": {
+        "description": "Content that MUST NOT appear in this schema - HARD FAIL if present. Those belong elsewhere.",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "retry_counters",
+            "future_recommendations",
+            "inferred_suppression_probability",
+            "rollout_decisions",
+            "platform_credentials",
+            "mutable_fields",
+            "raw_platform_payloads",
+            "per_post_data",
+            "ml_features",
+            "scoring_models"
+          ]
+        },
+        "uniqueItems": true
+      },
+      
+      "invariants": {
+        "description": "Invariants guaranteed by this schema - no more 'why did this post fail?' or 'was this suppressed?'",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "outcomes_are_explicit",
+            "retries_are_traceable",
+            "suppression_is_distinguishable_from_failure",
+            "platform_behavior_is_normalized",
+            "audits_can_reconstruct_reality",
+            "attempts_are_immutable",
+            "results_are_append_only",
+            "terminal_states_forbid_retries",
+            "success_requires_http_2xx"
+          ]
+        },
+        "uniqueItems": true
+      },
+      
+      "interaction_matrix": {
+        "description": "Component access matrix - no mutations outside the store",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "post_dispatcher.py": {
+            "const": "creates"
+          },
+          "posting_state_store.py": {
+            "const": "references"
+          },
+          "audit_logger.py": {
+            "const": "logs"
+          },
+          "post_health_tracker.py": {
+            "const": "consumes"
+          },
+          "risk_evaluator.py": {
+            "const": "consumes"
+          },
+          "learning/*": {
+            "const": "read-only"
+          },
+          "monitoring/*": {
+            "const": "read-only"
+          },
+          "billing/*": {
+            "const": "read-only"
+          },
+          "suppression_analysis/*": {
+            "const": "read-only"
+          },
+          "trust_modeling/*": {
+            "const": "read-only"
+          }
+        }
+      },
+      
+      "authority_boundary": {
+        "description": "Who may write vs read this schema - enforced by posting_state_store.py. Only the dispatcher and state store may write this schema. Everyone else reads.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "write": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "post_dispatcher.py",
+                "posting_state_store.py"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "description": "Only post_dispatcher.py and posting_state_store.py may write"
+          },
+          "read": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "audit_logger.py",
+                "post_health_tracker.py",
+                "risk_evaluator.py",
+                "learning/*",
+                "monitoring/*",
+                "billing/*",
+                "suppression_analysis/*",
+                "trust_modeling/*"
+              ]
+            },
+            "uniqueItems": true,
+            "description": "All other components read only"
+          }
+        },
+        "required": ["write", "read"]
+      }
+    },
+    
+    "$comment": "TIER-0 PRODUCTION CONTRACT: This schema is the ONLY allowed shape for posting outcomes. It preserves execution reality exactly once, forever. No outcome is interpreted prematurely. Retry decisions are auditable. Error classification is reproducible. Suppression is detectable. This schema guarantees: lossless capture, explicit ambiguity, platform-agnostic shape, deterministic parsing, audit survivability, replay safety.",
+    
+    "examples": [
+      {
+        "schema_version": "1.0.0",
+        "result_id": "01933c5e-8f2a-7b3d-9c4e-5f6a7b8c9d0e",
+        "intent_id": "01933c5e-7a1b-7c3d-8e4f-9a0b1c2d3e4f",
+        "attempt_number": 1,
+        "recorded_at": 1730000123.456,
+        "platform": "youtube",
+        "account_id": "yt_acc_12345",
+        "outcome": {
+          "status": "success",
+          "terminal": true,
+          "retryable": false,
+          "error_category": "none"
+        },
+        "platform_response": {
+          "remote_post_id": "dQw4w9WgXcQ",
+          "http_status": 200,
+          "platform_timestamp": 1730000100.0,
+          "warnings": null
+        },
+        "metrics": {
+          "latency_ms": 1234.5,
+          "upload_duration_ms": 890.2,
+          "processing_duration_ms": 300.1,
+          "initial_visibility": "public"
+        },
+        "trust_effects": {
+          "account_warning": false,
+          "strike_received": false,
+          "rate_limited": false,
+          "cooldown_seconds": null
+        },
+        "metadata": {
+          "dispatcher_id": "dispatcher-03",
+          "worker_id": "worker-42",
+          "notes": "Clean success"
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "result_id": "01933c5e-9a2b-7c3d-8e4f-0a1b2c3d4e5f",
+        "intent_id": "01933c5e-7a1b-7c3d-8e4f-9a0b1c2d3e4f",
+        "attempt_number": 2,
+        "recorded_at": 1730000456.789,
+        "platform": "youtube",
+        "account_id": "yt_acc_12345",
+        "outcome": {
+          "status": "failure",
+          "terminal": false,
+          "retryable": true,
+          "error_category": "rate_limit",
+          "error_code": "QUOTA_EXCEEDED",
+          "error_message": "Daily upload quota exceeded"
+        },
+        "platform_response": {
+          "remote_post_id": null,
+          "http_status": 429,
+          "platform_timestamp": 1730000450.0,
+          "warnings": null
+        },
+        "metrics": {
+          "latency_ms": 234.5,
+          "upload_duration_ms": null,
+          "processing_duration_ms": null,
+          "initial_visibility": null
+        },
+        "trust_effects": {
+          "account_warning": false,
+          "strike_received": false,
+          "rate_limited": true,
+          "cooldown_seconds": 3600
+        },
+        "metadata": {
+          "dispatcher_id": "dispatcher-03",
+          "worker_id": "worker-42",
+          "notes": "Rate limit hit on retry"
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "result_id": "01933c5e-ab3c-7d4e-9f5a-1b2c3d4e5f6a",
+        "intent_id": "01933c5e-8b2c-7d3e-9f4a-0b1c2d3e4f5a",
+        "attempt_number": 1,
+        "recorded_at": 1730001000.0,
+        "platform": "tiktok",
+        "account_id": "tt_acc_67890",
+        "outcome": {
+          "status": "suppressed",
+          "terminal": true,
+          "retryable": false,
+          "error_category": "none"
+        },
+        "platform_response": {
+          "remote_post_id": "tt_post_xyz789",
+          "http_status": 200,
+          "platform_timestamp": 1730000990.0,
+          "warnings": ["Content under review"]
+        },
+        "metrics": {
+          "latency_ms": 2100.0,
+          "upload_duration_ms": 1500.0,
+          "processing_duration_ms": 550.0,
+          "initial_visibility": "limited"
+        },
+        "trust_effects": {
+          "account_warning": true,
+          "strike_received": false,
+          "rate_limited": false,
+          "cooldown_seconds": null
+        },
+        "metadata": {
+          "dispatcher_id": "dispatcher-07",
+          "worker_id": "worker-13",
+          "notes": "Posted but immediately shadow-limited"
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "result_id": "01933c5e-cd4e-7e5f-0a1b-2c3d4e5f6a7b",
+        "intent_id": "01933c5e-9c3d-7e4f-0a1b-1c2d3e4f5a6b",
+        "attempt_number": 1,
+        "recorded_at": 1730002000.0,
+        "platform": "instagram",
+        "account_id": "ig_acc_11111",
+        "outcome": {
+          "status": "failure",
+          "terminal": true,
+          "retryable": false,
+          "error_category": "auth",
+          "error_code": "INVALID_TOKEN",
+          "error_message": "The access token is invalid or has expired"
+        },
+        "platform_response": {
+          "remote_post_id": null,
+          "http_status": 401,
+          "platform_timestamp": 1730001995.0,
+          "warnings": null
+        },
+        "metrics": {
+          "latency_ms": 234.7,
+          "upload_duration_ms": null,
+          "processing_duration_ms": null,
+          "initial_visibility": null
+        },
+        "trust_effects": {
+          "account_warning": false,
+          "strike_received": false,
+          "rate_limited": false,
+          "cooldown_seconds": null
+        },
+        "metadata": {
+          "dispatcher_id": "dispatcher-05",
+          "worker_id": "worker-21",
+          "notes": "Authentication failure - token expired"
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "result_id": "01933c5e-de5f-7f6a-1b2c-3d4e5f6a7b8c",
+        "intent_id": "01933c5e-ad4e-7f5a-1b2c-2d3e4f5a6b7c",
+        "attempt_number": 1,
+        "recorded_at": 1730003000.0,
+        "platform": "shorts",
+        "account_id": "shorts_acc_22222",
+        "outcome": {
+          "status": "success",
+          "terminal": true,
+          "retryable": false,
+          "error_category": "none"
+        },
+        "platform_response": {
+          "remote_post_id": "shorts_abc123",
+          "http_status": 201,
+          "platform_timestamp": 1730002995.0,
+          "warnings": []
+        },
+        "metrics": {
+          "latency_ms": 892.3,
+          "upload_duration_ms": 650.1,
+          "processing_duration_ms": 200.0,
+          "initial_visibility": "public"
+        },
+        "trust_effects": {
+          "account_warning": false,
+          "strike_received": false,
+          "rate_limited": false,
+          "cooldown_seconds": null
+        },
+        "metadata": {
+          "dispatcher_id": "dispatcher-09",
+          "worker_id": "worker-55",
+          "notes": "YouTube Shorts upload successful"
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "result_id": "01933c5e-ef6a-7a7b-2c3d-4e5f6a7b8c9d",
+        "intent_id": "01933c5e-be5f-7a6b-2c3d-3e4f5a6b7c8d",
+        "attempt_number": 3,
+        "recorded_at": 1730004000.0,
+        "platform": "tiktok",
+        "account_id": "tt_acc_33333",
+        "outcome": {
+          "status": "failure",
+          "terminal": true,
+          "retryable": false,
+          "error_category": "content",
+          "error_code": "CONTENT_VIOLATION",
+          "error_message": "Content violates community guidelines"
+        },
+        "platform_response": {
+          "remote_post_id": null,
+          "http_status": 403,
+          "platform_timestamp": 1730003995.0,
+          "warnings": null
+        },
+        "metrics": {
+          "latency_ms": 456.2,
+          "upload_duration_ms": null,
+          "processing_duration_ms": null,
+          "initial_visibility": null
+        },
+        "trust_effects": {
+          "account_warning": true,
+          "strike_received": true,
+          "rate_limited": false,
+          "cooldown_seconds": 86400
+        },
+        "metadata": {
+          "dispatcher_id": "dispatcher-11",
+          "worker_id": "worker-33",
+          "notes": "Content violation - max attempts reached, terminal failure"
+        }
+      },
+      {
+        "schema_version": "1.0.0",
+        "result_id": "01933c5e-fa7b-7b8c-3d4e-5f6a7b8c9d0e",
+        "intent_id": "01933c5e-cf6a-7b7c-3d4e-4e5f6a7b8c9d",
+        "attempt_number": 1,
+        "recorded_at": 1730005000.0,
+        "platform": "youtube",
+        "account_id": "yt_acc_44444",
+        "outcome": {
+          "status": "unknown",
+          "terminal": false,
+          "retryable": true,
+          "error_category": "platform",
+          "error_code": "TIMEOUT",
+          "error_message": "Request timed out - platform response unknown"
+        },
+        "platform_response": {
+          "remote_post_id": null,
+          "http_status": 0,
+          "platform_timestamp": null,
+          "warnings": null
+        },
+        "metrics": {
+          "latency_ms": 30000.0,
+          "upload_duration_ms": null,
+          "processing_duration_ms": null,
+          "initial_visibility": null
+        },
+        "trust_effects": {
+          "account_warning": null,
+          "strike_received": null,
+          "rate_limited": null,
+          "cooldown_seconds": null
+        },
+        "metadata": {
+          "dispatcher_id": "dispatcher-02",
+          "worker_id": "worker-15",
+          "notes": "Timeout - outcome unknown, retry recommended"
+        }
+      }
+    ]
+  }
