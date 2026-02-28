@@ -1,448 +1,162 @@
-# AI Viral Content Factory
+# Viral Content System
 
-> An autonomous, multi-niche content production system designed to consistently generate viral videos across multiple platforms.
+An autonomous, production-grade content generation system that ingests data from multiple platforms, extracts virality features, scores content potential, and generates optimized content at scale.
 
-[![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-orange.svg)](CHANGELOG.md)
+## Overview
 
----
+This system is designed to operate as a complete pipeline for viral content creation:
 
-## 📋 Project Overview
+1. **Ingestion** - Fetches real data from YouTube, Instagram, TikTok, and other platforms
+2. **Feature Extraction** - Analyzes content to extract virality signals (engagement patterns, sentiment, visual features)
+3. **Scoring** - Computes viral potential scores using ML models and trend analysis
+4. **Generation** - Creates optimized content based on top-performing trends
+5. **Posting** - Manages multi-platform content distribution with safety checks
 
-The **AI Viral Content Factory** is a production-grade system that combines machine learning, reinforcement learning, and real-time analytics to create highly engaging content at scale. The system operates autonomously across multiple niches and platforms, continuously learning from performance data to optimize for virality.
-
-### Performance Goals
-
-- **Baseline Performance**: 5M+ views per video
-- **Viral Targets**: Repeatable 30M–300M+ view content
-- **Scale Capacity**: 50k–100k videos/day per niche
-- **Multi-Platform**: YouTube, TikTok, Instagram, Facebook, X (Twitter)
-
-### Key Features
-
-- **Autonomous Operation**: End-to-end content creation with minimal human intervention
-- **Multi-Niche Support**: Simultaneous operation across different content verticals
-- **Adaptive Learning**: RL agents continuously optimize for engagement metrics
-- **Real-Time Analytics**: Live performance monitoring and A/B testing
-- **Modular Architecture**: Easy addition of new niches, platforms, or content types
-
----
-
-## 🏗️ Architecture Diagram
+## Project Structure
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      AI VIRAL CONTENT FACTORY                            │
-└─────────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│ INPUT LAYER                                                              │
-├──────────────┬──────────────┬──────────────┬──────────────┬────────────┤
-│ Trend Scraper│ Competitor   │ User Comments│ Platform APIs│ Audio/Video│
-│              │ Analysis     │ & Feedback   │              │ Libraries  │
-└──────┬───────┴──────┬───────┴──────┬───────┴──────┬───────┴──────┬─────┘
-       │              │              │              │              │
-       └──────────────┴──────────────┴──────────────┴──────────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │  DATA INGESTION   │
-                    │   & VALIDATION    │
-                    └─────────┬─────────┘
-                              │
-       ┌──────────────────────┼──────────────────────┐
-       │                      │                      │
-┌──────▼──────┐    ┌─────────▼─────────┐    ┌──────▼──────┐
-│ Feature     │    │   Trend Analysis  │    │ Sentiment   │
-│ Extraction  │    │   & Prediction    │    │ Analysis    │
-└──────┬──────┘    └─────────┬─────────┘    └──────┬──────┘
-       │                      │                      │
-       └──────────────────────┼──────────────────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │    ML/RL CORE     │
-                    ├───────────────────┤
-                    │ • Content Strategy│
-                    │ • Topic Selection │
-                    │ • Format Optimizer│
-                    │ • Timing Predictor│
-                    └─────────┬─────────┘
-                              │
-       ┌──────────────────────┼──────────────────────┐
-       │                      │                      │
-┌──────▼──────┐    ┌─────────▼─────────┐    ┌──────▼──────┐
-│ Script      │    │  Visual/Audio     │    │ Metadata    │
-│ Generation  │    │  Generation       │    │ Optimization│
-└──────┬──────┘    └─────────┬─────────┘    └──────┬──────┘
-       │                      │                      │
-       └──────────────────────┼──────────────────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │ CONTENT ASSEMBLY  │
-                    │   & RENDERING     │
-                    └─────────┬─────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │ QUALITY ASSURANCE │
-                    │   & A/B TESTING   │
-                    └─────────┬─────────┘
-                              │
-       ┌──────────────────────┼──────────────────────┐
-       │                      │                      │
-┌──────▼──────┐    ┌─────────▼─────────┐    ┌──────▼──────┐
-│ YouTube     │    │   TikTok/IG      │    │ Facebook/X  │
-│ Publisher   │    │   Publisher       │    │ Publisher   │
-└──────┬──────┘    └─────────┬─────────┘    └──────┬──────┘
-       │                      │                      │
-       └──────────────────────┼──────────────────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │  PERFORMANCE      │
-                    │  MONITORING       │
-                    └─────────┬─────────┘
-                              │
-       ┌──────────────────────┼──────────────────────┐
-       │                      │                      │
-┌──────▼──────┐    ┌─────────▼─────────┐    ┌──────▼──────┐
-│ Metrics DB  │    │  RL Feedback Loop │    │ Analytics   │
-│             │    │                   │    │ Dashboard   │
-└─────────────┘    └───────────────────┘    └─────────────┘
+viral-content-system/
+├── ingestion/              # Data ingestion from external platforms
+│   ├── platform_scrapers/ # YouTube, Instagram, TikTok scrapers
+│   └── ingestion_pipeline.py
+│
+├── feature_extraction/     # Feature engineering and analysis
+│   ├── virality_feature_engine.py
+│   └── video/             # Video-specific feature extractors
+│
+├── evaluation/            # Scoring and virality prediction
+│   ├── viral_score.py
+│   └── metrics.py
+│
+├── generation/            # Content generation pipeline
+│   ├── content_pipeline.py
+│   ├── script_generator.py
+│   └── visual_composer.py
+│
+├── posting/               # Multi-platform posting system
+│   ├── platforms/         # Platform-specific posters
+│   └── posting_queue.py
+│
+├── orchestration/         # System orchestration and lifecycle
+│   └── system_orchestrator.py
+│
+├── models/                # ML models and RL agents
+│   ├── ml_models/         # Engagement predictors, classifiers
+│   └── rl_agents/         # Reinforcement learning agents
+│
+├── data/                  # Data pipelines, lineage, validation
+│   ├── pipelines/         # Data processing pipelines
+│   ├── lineage/           # Data lineage tracking
+│   └── schemas/           # Data schemas and validation
+│
+├── infra/                 # Infrastructure and observability
+│   ├── observability/     # Metrics, health checks, tracing
+│   ├── persistence/       # State management and storage
+│   └── recovery/          # Failure recovery and repair
+│
+├── config/                # Configuration management
+│   └── environments/      # Environment-specific configs
+│
+├── experiments/           # A/B testing and experimentation
+├── account_system/        # Account health and trust management
+├── factories/             # Multi-niche factory management
+└── main.py               # Entry point
 ```
 
-### Pipeline Flow
+## Key Components
 
-1. **Ingestion**: Scrape trends, analyze competitors, collect user feedback
-2. **Feature Extraction**: Extract relevant signals from raw data
-3. **ML/RL Decision**: Determine optimal content strategy using trained models
-4. **Content Generation**: Create scripts, visuals, audio, and metadata
-5. **Publishing**: Deploy content across multiple platforms simultaneously
-6. **Evaluation**: Monitor performance metrics in real-time
-7. **Feedback Loop**: Update RL models based on performance data
+### Ingestion Pipeline
+- Fetches real content from multiple platforms via APIs
+- Supports YouTube, Instagram, TikTok, Reddit
+- Handles rate limiting, retries, and data validation
 
----
+### Feature Extraction Engine
+- Extracts multimodal features (text, video, audio, engagement)
+- Builds dependency graphs for feature computation
+- Tracks feature lineage and versioning
 
-## 🚀 Installation
+### Scoring System
+- Computes viral potential scores using ML models
+- Tracks trends and velocity signals
+- Supports real-time and batch scoring
+
+### Content Generation
+- Generates scripts, visuals, and audio
+- Optimizes for retention and engagement
+- Uses RL agents to learn from performance
+
+### Posting System
+- Multi-platform posting with safety checks
+- Account health monitoring
+- Cadence management and risk evaluation
+
+### Infrastructure
+- Observability: Prometheus metrics, Grafana dashboards, health endpoints
+- Persistence: Multiple backends (filesystem, memory, Redis, Postgres)
+- Recovery: Automatic failure detection and repair
+- Lineage: Complete data lineage tracking for reproducibility
+
+## Getting Started
 
 ### Prerequisites
 
-- **Python**: >= 3.11
-- **OS**: Linux (Ubuntu 20.04+), macOS, or Windows with WSL2
-- **Hardware**: 16GB+ RAM recommended, GPU optional but beneficial
-- **Storage**: 100GB+ free space for media assets and models
+- Python 3.11+
+- YouTube API key (optional, for real data ingestion)
 
-### Setup Instructions
+### Installation
 
-1. **Clone the repository**
 ```bash
-git clone https://github.com/yourorg/ai-viral-content-factory.git
-cd ai-viral-content-factory
-```
-
-2. **Create virtual environment** (recommended)
-```bash
-python3.11 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. **Install dependencies**
-```bash
-pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-4. **Download ML models** (optional, auto-downloads on first run)
+### Configuration
+
+Set your API keys via environment variables:
+
+```powershell
+$env:YOUTUBE_API_KEYS="YOUR_API_KEY_HERE"
+$env:YOUTUBE_DATA_DIR="./data/raw/youtube"
+```
+
+Or use the setup script:
+
+```powershell
+.\setup_api_keys.ps1
+```
+
+### Running the System
+
+**Full system (all components):**
 ```bash
-python scripts/download_models.py
+python main.py --mode=full-system
 ```
 
-5. **Verify installation**
+**Individual components:**
 ```bash
-python -m pytest tests/ -v
+python main.py --mode=ingest      # Only ingestion
+python main.py --mode=generate    # Only generation
+python main.py --mode=post        # Only posting
+python main.py --mode=train       # Only training
 ```
 
----
+## Architecture
 
-## ⚙️ Configuration
+The system follows a modular, pipeline-based architecture:
 
-### Environment Variables
+- **Orchestration Layer**: `SystemOrchestrator` manages component lifecycle and data flow
+- **Data Flow**: Ingestion → Feature Extraction → Scoring → Generation → Posting
+- **Observability**: Built-in metrics, health checks, and tracing
+- **Recovery**: Automatic failure detection and repair strategies
+- **Lineage**: Complete data lineage for reproducibility and debugging
 
-Create a `.env` file in the project root with your API keys and secrets:
+## Environment Configuration
 
-```bash
-# Platform API Keys
-YOUTUBE_API_KEY=your_youtube_api_key_here
-YOUTUBE_CLIENT_ID=your_client_id
-YOUTUBE_CLIENT_SECRET=your_client_secret
+The system supports multiple environments via YAML configs:
 
-TIKTOK_API_KEY=your_tiktok_api_key
-INSTAGRAM_ACCESS_TOKEN=your_ig_access_token
+- `config/environments/development.yaml`
+- `config/environments/staging.yaml`
+- `config/environments/production.yaml`
 
-# AI/ML Services
-OPENAI_API_KEY=your_openai_key
-ANTHROPIC_API_KEY=your_anthropic_key
-ELEVENLABS_API_KEY=your_elevenlabs_key
+## License
 
-# Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/viral_factory
-REDIS_URL=redis://localhost:6379/0
-
-# Monitoring
-SENTRY_DSN=your_sentry_dsn
-DATADOG_API_KEY=your_datadog_key
-
-# Security
-SECRET_KEY=your_secret_key_here
-JWT_SECRET=your_jwt_secret
-```
-
-### Global Configuration
-
-The main configuration file is located at `/config/default.yaml`:
-
-```yaml
-# Global settings applied across all factories
-system:
-  max_concurrent_factories: 10
-  default_video_quality: 1080p
-  enable_gpu: true
-  log_level: INFO
-
-performance_targets:
-  baseline_views: 5000000
-  viral_threshold: 30000000
-  target_engagement_rate: 0.08
-  
-ml_models:
-  trend_predictor: models/trend_v2.pkl
-  content_optimizer: models/optimizer_v3.pkl
-  rl_agent: models/rl_agent_v1.pkl
-```
-
-### Per-Niche Configuration
-
-Each niche has its own configuration in `/config/factories/`:
-
-- `/config/factories/finance.yaml`
-- `/config/factories/gaming.yaml`
-- `/config/factories/comedy.yaml`
-- `/config/factories/education.yaml`
-
-Example niche config structure:
-
-```yaml
-niche: finance
-enabled: true
-daily_video_target: 50
-platforms: [youtube, tiktok, instagram]
-content_strategy:
-  style: educational_entertainment
-  duration_range: [60, 180]  # seconds
-  posting_schedule: peak_hours
-```
-
----
-
-## 🎯 Usage / Running the Factories
-
-### Starting a Factory
-
-#### Command Line Interface
-
-```bash
-# Start a single factory
-python factory_manager.py start --niche finance
-
-# Start multiple factories
-python factory_manager.py start --niche finance,gaming,comedy
-
-# Start all configured factories
-python factory_manager.py start --all
-
-# Run in background mode
-python factory_manager.py start --niche finance --daemon
-```
-
-#### Python Script
-
-```python
-from factory_manager import FactoryManager
-from config import load_config
-
-# Initialize factory manager
-config = load_config('config/default.yaml')
-manager = FactoryManager(config)
-
-# Start a specific factory
-manager.start_factory('finance')
-
-# Monitor status
-status = manager.get_factory_status('finance')
-print(f"Status: {status['state']}, Videos Generated: {status['count']}")
-
-# Stop factory
-manager.stop_factory('finance')
-```
-
-### Running Tests
-
-```bash
-# Run all tests
-pytest tests/ -v
-
-# Run specific test suite
-pytest tests/test_content_generation.py -v
-
-# Run with coverage
-pytest tests/ --cov=src --cov-report=html
-```
-
-### Jupyter Notebooks
-
-Exploratory notebooks are available in `/notebooks/`:
-
-```bash
-jupyter notebook notebooks/01_data_exploration.ipynb
-```
-
-### Monitoring
-
-Access the dashboard at `http://localhost:8000/dashboard` after starting the factory manager.
-
----
-
-## 🤝 Contribution Guidelines
-
-### Branching Strategy
-
-- `main`: Production-ready code
-- `develop`: Integration branch for features
-- `feature/*`: New features or enhancements
-- `bugfix/*`: Bug fixes
-- `hotfix/*`: Urgent production fixes
-
-### Workflow
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature-name`
-3. Commit changes: `git commit -m "Add: description of changes"`
-4. Push to branch: `git push origin feature/your-feature-name`
-5. Submit a Pull Request to `develop`
-
-### Code Style
-
-- Follow PEP 8 guidelines
-- Use type hints for all function signatures
-- Maximum line length: 100 characters
-- Use descriptive variable names
-- Add docstrings to all classes and functions
-
-```python
-def generate_content(niche: str, config: dict) -> ContentPackage:
-    """
-    Generate content package for specified niche.
-    
-    Args:
-        niche: Content niche identifier
-        config: Configuration dictionary
-        
-    Returns:
-        ContentPackage with generated assets
-        
-    Raises:
-        ValueError: If niche is not supported
-    """
-    pass
-```
-
-### Automated Checks
-
-All PRs must pass:
-- Unit tests (pytest)
-- Code linting (flake8, black)
-- Type checking (mypy)
-- Security scan (bandit)
-
-CI/CD pipeline runs automatically on PR creation.
-
----
-
-## 📝 Notes
-
-### Scalability
-
-The system is designed to handle:
-- **50k–100k videos/day per niche**
-- **10+ simultaneous niche factories**
-- **Multi-region deployment** for global reach
-- **Horizontal scaling** via containerization (Docker/Kubernetes)
-
-### Modularity
-
-Adding new components is straightforward:
-
-**New Niche**: Add config file to `/config/factories/new_niche.yaml`
-
-**New Platform**: Implement publisher interface in `/src/publishers/new_platform.py`
-
-**New ML Model**: Register in `/src/ml/model_registry.py`
-
-### Performance Optimization
-
-- Content generation is parallelized across CPU cores
-- GPU acceleration for video rendering (if available)
-- Redis caching for frequently accessed data
-- Database query optimization with indexes
-- Async I/O for network operations
-
-### Version Compatibility
-
-- **v1.x**: Initial release, basic functionality
-- **v2.x**: Added RL agents and multi-platform support
-- **v3.x**: Current version with advanced analytics
-
-Breaking changes are documented in [CHANGELOG.md](CHANGELOG.md).
-
-### Monitoring & Alerts
-
-- **Sentry**: Error tracking and performance monitoring
-- **Datadog**: Infrastructure and application metrics
-- **Custom Dashboard**: Real-time factory performance visualization
-
-### Security Considerations
-
-- API keys stored in `.env` (never commit to version control)
-- Database credentials rotated monthly
-- Content moderation filters prevent policy violations
-- Rate limiting on API endpoints
-
----
-
-## 📊 Contributing to Virality
-
-This README ensures:
-- **Developer Onboarding**: New team members can deploy factories within hours, not days
-- **Reduced Downtime**: Clear documentation minimizes configuration errors
-- **Consistent Practices**: Standardized workflows maintain code quality
-- **Knowledge Transfer**: Architectural understanding prevents bottlenecks
-
-By maintaining comprehensive documentation, we maximize system uptime and operational efficiency, directly supporting our virality goals.
-
----
-
-## 📞 Support
-
-- **Documentation**: [docs.viral-factory.ai](https://docs.viral-factory.ai)
-- **Issues**: [GitHub Issues](https://github.com/yourorg/ai-viral-content-factory/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourorg/ai-viral-content-factory/discussions)
-- **Email**: support@viral-factory.ai
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-**Built with 🚀 by the AI Content Factory Team**#   v i r a l - c o n t e n t - s y s t e m  
- 
+See `license` file for details.
