@@ -12,57 +12,6 @@ This system is designed to operate as a complete pipeline for viral content crea
 4. **Generation** - Creates optimized content based on top-performing trends
 5. **Posting** - Manages multi-platform content distribution with safety checks
 
-## Project Structure
-
-```
-viral-content-system/
-├── ingestion/              # Data ingestion from external platforms
-│   ├── platform_scrapers/ # YouTube, Instagram, TikTok scrapers
-│   └── ingestion_pipeline.py
-│
-├── feature_extraction/     # Feature engineering and analysis
-│   ├── virality_feature_engine.py
-│   └── video/             # Video-specific feature extractors
-│
-├── evaluation/            # Scoring and virality prediction
-│   ├── viral_score.py
-│   └── metrics.py
-│
-├── generation/            # Content generation pipeline
-│   ├── content_pipeline.py
-│   ├── script_generator.py
-│   └── visual_composer.py
-│
-├── posting/               # Multi-platform posting system
-│   ├── platforms/         # Platform-specific posters
-│   └── posting_queue.py
-│
-├── orchestration/         # System orchestration and lifecycle
-│   └── system_orchestrator.py
-│
-├── models/                # ML models and RL agents
-│   ├── ml_models/         # Engagement predictors, classifiers
-│   └── rl_agents/         # Reinforcement learning agents
-│
-├── data/                  # Data pipelines, lineage, validation
-│   ├── pipelines/         # Data processing pipelines
-│   ├── lineage/           # Data lineage tracking
-│   └── schemas/           # Data schemas and validation
-│
-├── infra/                 # Infrastructure and observability
-│   ├── observability/     # Metrics, health checks, tracing
-│   ├── persistence/       # State management and storage
-│   └── recovery/          # Failure recovery and repair
-│
-├── config/                # Configuration management
-│   └── environments/      # Environment-specific configs
-│
-├── experiments/           # A/B testing and experimentation
-├── account_system/        # Account health and trust management
-├── factories/             # Multi-niche factory management
-└── main.py               # Entry point
-```
-
 ## Key Components
 
 ### Ingestion Pipeline
